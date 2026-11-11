@@ -1,0 +1,72 @@
+{
+  "name": "long-exposure",
+  "productName": "Long Exposure",
+  "version": "0.1.0",
+  "description": "A 60-second living daguerreotype: a portrait that breathes and flushes with your real pulse, made with the Presage SmartSpectra SDK.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "main": "out/main/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "electron-vite build",
+    "build:web": "vite build --config vite.web.config.ts",
+    "dist:win": "electron-vite build && electron-builder --win",
+    "dist:mac": "electron-vite build && electron-builder --mac",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "spike": "node scripts/spike.mjs",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "build": {
+    "appId": "dev.longexposure.app",
+    "productName": "Long Exposure",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "target": "dmg",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSCameraUsageDescription": "Long Exposure reads your pulse and breathing from the camera, on this device, while you sit for a portrait."
+      },
+      "extraResources": [
+        {
+          "from": "node_modules/@smartspectra/node-sdk-darwin-${arch}/",
+          "to": "smartspectra/"
+        }
+      ]
+    },
+    "win": {
+      "target": "nsis",
+      "extraResources": [
+        {
+          "from": "node_modules/@smartspectra/node-sdk-win32-${arch}/",
+          "to": "smartspectra/"
+        }
+      ]
+    }
+  },
+  "dependencies": {
+    "@smartspectra/node-sdk": "^3.5.0",
+    "gifenc": "^1.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0",
+    "electron-vite": "^6.0.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.7",
+    "vitest": "^5.1.0"
+  }
+}

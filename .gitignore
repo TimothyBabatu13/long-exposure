@@ -1,0 +1,9 @@
+node_modules/
+out/
+dist-web/
+release/
+.env
+recordings/
+*.plate.json
+!samples/*.plate.json
+smoke/

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: mediastream:; worker-src 'self' blob:; connect-src 'self' ws://localhost:*;" />
+  <title>Long Exposure</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <!-- 1. The sitting agreement -->
+  <section id="welcome" class="screen active" aria-labelledby="welcome-title">
+    <div class="card">
+      <p class="eyebrow">A studio for living daguerreotypes</p>
+      <h1 id="welcome-title">Long Exposure</h1>
+      <p class="lede">In 1840 a portrait took a minute. You had to hold still. Your heart couldn't.</p>
+
+      <div id="source-banner" class="banner" role="status"></div>
+
+      <h2>The sitting agreement</h2>
+      <ul class="agreement">
+        <li><strong>What the camera reads:</strong> the shape of your face, your blinks, whether you are speaking, and your pulse and breathing from tiny changes in your skin. Nothing else.</li>
+        <li><strong>What is kept:</strong> no photographs or video, ever. Your plate is drawn from face geometry and rhythm, and it lives in memory until you export it or leave.</li>
+        <li><strong>Only you:</strong> the sitting stops if a second face appears, and the lens caps whenever you talk, move or switch away from this window.</li>
+        <li><strong>Network:</strong> this app sends nothing itself. <span id="telemetry-line">Presage telemetry is off.</span> The SDK contacts Presage to check the API key and count usage (<a href="https://smartspectra.presagetech.com/docs/telemetry-and-privacy" target="_blank" rel="noopener">Presage's privacy notes</a>).</li>
+        <li><strong>Not medical:</strong> this is portraiture. It makes no health claims and should not be used for any.</li>
+      </ul>
+
+      <div class="options">
+        <label><input type="checkbox" id="opt-sound" checked /> Heartbeat sound</label>
+        <label><input type="checkbox" id="opt-ghosts" checked /> Blink ghosts</label>
+        <label><input type="checkbox" id="opt-gentle" /> Gentle mode (no shimmer)</label>
+        <label><input type="checkbox" id="opt-mirror" /> Show me the camera</label>
+        <label class="name">Name on the plate <input type="text" id="opt-name" maxlength="40" placeholder="Sitter" /></label>
+      </div>
+
+      <div class="actions">
+        <button id="btn-sit" class="primary">I agree to sit <kbd>Enter</kbd></button>
+        <label class="secondary file">Play a recorded sitting<input type="file" id="replay-file" accept=".ndjson,.jsonl,.txt" hidden /></label>
+      </div>
+      <p class="fine">Sit square to the camera, face a lamp or window, and keep the camera still. The sitting takes about a minute of stillness.</p>
+    </div>
+  </section>
+
+  <!-- 2. The sitting -->
+  <section id="studio" class="screen" aria-label="The sitting">
+    <div class="stage-wrap">
+      <canvas id="plate" class="plate" aria-label="Your portrait developing on a silver plate"></canvas>
+      <div id="caption" class="caption" aria-live="polite"></div>
+      <div class="progress" aria-hidden="true">
+        <div id="progress-fill"></div>
+        <span style="left:0%">Focusing</span><span style="left:20%">Heart</span><span style="left:50%">Breath</span><span style="left:100%">Fixed</span>
+      </div>
+    </div>
+    <aside class="ledger" aria-label="Studio ledger">
+      <div class="lens"><span id="lens-dot"></span><span id="lens-text">Lens closed</span></div>
+      <h3>Studio Ledger</h3>
+      <dl class="net">
+        <dt>Camera frames saved</dt><dd>0</dd>
+        <dt>Page network requests</dt><dd id="net-count">0</dd>
+        <dt>Presage telemetry</dt><dd id="net-telemetry">off</dd>
+        <dt>Signal source</dt><dd id="net-source">–</dd>
+      </dl>
+      <ol id="ledger-log" class="log"></ol>
+      <video id="mirror" autoplay muted playsinline hidden></video>
+      <button id="btn-leave" class="danger">Leave the studio <small>(wipes everything)</small></button>
+    </aside>
+  </section>
+
+  <!-- 3. The plate -->
+  <section id="result" class="screen" aria-label="Your plate">
+    <div class="stage-wrap">
+      <div id="flip" class="flip">
+        <canvas id="front" class="plate face front"></canvas>
+        <canvas id="back" class="plate face back"></canvas>
+      </div>
+      <p id="endcard" class="endcard"></p>
+    </div>
+    <aside class="ledger">
+      <h3>Your plate</h3>
+      <button id="btn-flip">Turn the plate over</button>
+      <button id="btn-gif" class="primary">Save GIF loop</button>
+      <button id="btn-png">Save front (PNG)</button>
+      <button id="btn-verso">Save verso (PNG)</button>
+      <button id="btn-plate">Save plate file</button>
+      <button id="btn-pair">Double Exposure… <small>(add a saved plate)</small></button>
+      <label class="secondary file" id="pair-web" hidden>Double Exposure…<input type="file" id="pair-file" accept=".json" hidden /></label>
+      <button id="btn-record" hidden>Save session recording</button>
+      <button id="btn-again">Sit again</button>
+      <button id="btn-leave2" class="danger">Leave the studio <small>(wipes everything)</small></button>
+      <p class="fine">Exports are written only where you choose. A plate holds no photograph, but it is derived from your body. Share it as you would a photo.</p>
+    </aside>
+  </section>
+
+  <div id="toast" class="toast" role="alert" hidden></div>
+  <script type="module" src="./main.ts"></script>
+</body>
+</html>
