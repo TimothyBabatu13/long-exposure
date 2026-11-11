@@ -21,6 +21,24 @@ export interface SignalSource {
 
 const now = () => Date.now() / 1000;
 
+/** Camera request for the live sitting (see LiveSource.start). */
+export const CAMERA = { width: 640, height: 480, fps: 30, minFps: 24 } as const;
+
+/** SmartSpectraErrorCode values after which the SDK session is over. */
+const SESSION_ENDING_ERRORS = new Set([2, 3, 4, 5, 6, 7, 8, 13, 14]);
+
+export function friendlyError(code: number, message: string): string {
+  switch (code) {
+    case 2: return 'The SmartSpectra API key was rejected. Check SMARTSPECTRA_API_KEY in .env. (code 2)';
+    case 4: return 'Your SmartSpectra credits are used up. (code 4)';
+    case 5: return 'Could not reach Presage to check the key or load the models. Check your internet connection. (code 5)';
+    case 7: return 'The camera is unavailable. Close other apps using it and try again. (code 7)';
+    case 13: return 'This API key is not allowed one of the requested metrics. (code 13)';
+    case 14: return 'The camera frame rate stayed too low. Close heavy apps, add light (webcams slow down in the dark) and sit again. (code 14)';
+    default: return `${message} (code ${code})`;
+  }
+}
+
 export class LiveSource implements SignalSource {
   readonly kind = 'live' as const;
   preview: MediaStream | null = null;
@@ -28,6 +46,7 @@ export class LiveSource implements SignalSource {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private sdk: any = null;
   private recording: { at: number; e: SourceEvent }[] | null = null;
+  private stream: MediaStream | null = null;
   private t0 = 0;
 
   constructor(private apiKey: string, private telemetry: boolean, record = false) {
@@ -50,7 +69,22 @@ export class LiveSource implements SignalSource {
       requestedMetrics: [...r.cardioMetrics, ...r.breathingMetrics, ...r.faceMetrics],
       enableTelemetry: this.telemetry,
     });
-    this.sdk.on('streamAvailable', (stream: MediaStream) => { this.preview = stream; });
+    // We open the camera ourselves at 640x480 instead of the SDK default of
+    // 1280x720. Renderer frames are copied to the main process as raw RGBA, so
+    // 720p at 30 fps is ~110 MB/s and starves slower laptops into
+    // kSustainedLowFrameRate (14). 640x480 is a third of that and still frames
+    // a head and upper chest comfortably.
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: 'user',
+        width: { ideal: CAMERA.width },
+        height: { ideal: CAMERA.height },
+        frameRate: { ideal: CAMERA.fps, min: CAMERA.minFps },
+      },
+    });
+    this.preview = this.stream;
+    this.sdk.useMediaStream(this.stream);
     this.sdk.on('metrics', (buf: Uint8Array) => {
       const packet = metricsToPacket(decodeMetrics(buf), now());
       this.emit({ type: 'packet', packet });
@@ -59,14 +93,29 @@ export class LiveSource implements SignalSource {
       this.emit({ type: 'readiness', readiness: readinessFromCode(code), hint }));
     this.sdk.on('processingStatus', (status: number) =>
       this.emit({ type: 'running', running: status === r.ProcessingStatus.kRunning }));
-    this.sdk.on('error', (code: number, message: string, retryable: boolean) =>
-      this.emit({ type: 'error', message: `${message} (code ${code})`, fatal: !retryable }));
-    await this.sdk.start();
+    // An error that ends the SDK session must end the sitting too; otherwise
+    // the camera keeps feeding a stopped SDK ("not in a valid state").
+    this.sdk.on('error', (code: number, message: string) =>
+      this.emit({ type: 'error', message: friendlyError(code, message), fatal: SESSION_ENDING_ERRORS.has(code) }));
+    try {
+      await this.sdk.start();
+    } catch (err) {
+      await this.stop();
+      throw err;
+    }
   }
 
   async stop(): Promise<void> {
-    if (!this.sdk) return;
-    try { await this.sdk.stop(); } finally { this.sdk.destroy(); this.sdk = null; this.preview = null; }
+    const sdk = this.sdk;
+    this.sdk = null;
+    try { if (sdk) await sdk.stop(); } catch { /* already stopped */ }
+    finally {
+      try { sdk?.destroy(); } catch { /* ignore */ }
+      // We own the stream (useMediaStream), so we release the camera.
+      this.stream?.getTracks().forEach((t) => t.stop());
+      this.stream = null;
+      this.preview = null;
+    }
   }
 
   /** NDJSON of everything received, for building replays. Memory only until saved. */

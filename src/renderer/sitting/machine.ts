@@ -9,7 +9,7 @@
 import type { LedgerEntry, Readiness } from '../../shared/types';
 
 export type Stage = 'focusing' | 'heart' | 'breath' | 'fixing' | 'developed' | 'abandoned';
-export type PauseReason = 'talking' | 'motion' | 'no-face' | 'lighting' | 'framing' | 'away' | 'starting';
+export type PauseReason = 'talking' | 'motion' | 'no-face' | 'lighting' | 'framing' | 'crowd' | 'away' | 'starting';
 
 export interface SittingInputs {
   readiness: Readiness;
@@ -25,6 +25,8 @@ export const STAGE_AT = { heart: 12, breath: 30, fixing: 60 } as const;
 /** If HRV never stabilises, the plate develops as "underexposed" at this point. */
 export const MAX_EXPOSURE_S = 120;
 const FIX_DURATION_S = 3;
+/** A second face must persist this long before the sitting is abandoned (single-frame detector flickers are ignored). */
+export const SECOND_FACE_ABANDON_S = 2;
 
 export class Sitting {
   stage: Stage = 'focusing';
@@ -33,6 +35,7 @@ export class Sitting {
   underexposed = false;
   readonly ledger: LedgerEntry[] = [];
   private fixedAt: number | null = null;
+  private secondFaceFor = 0;
 
   constructor(private onLedger: (e: LedgerEntry) => void = () => {}) {}
 
@@ -50,6 +53,7 @@ export class Sitting {
       case 'motion': return 'motion';
       case 'too-dark': case 'too-bright': return 'lighting';
       case 'framing': return 'framing';
+      case 'multiple-faces': return 'crowd';
       default: break;
     }
     if (i.talking) return 'talking';
@@ -61,7 +65,10 @@ export class Sitting {
     if (this.stage === 'developed' || this.stage === 'abandoned') return this.stage;
 
     // A second face ends the sitting: the plate is for one consenting person.
-    if (i.readiness === 'multiple-faces') {
+    // The detector flickers, so the lens caps at once but the sitting is only
+    // abandoned if the second face stays for SECOND_FACE_ABANDON_S.
+    this.secondFaceFor = i.readiness === 'multiple-faces' ? this.secondFaceFor + dt : 0;
+    if (this.secondFaceFor >= SECOND_FACE_ABANDON_S) {
       this.stage = 'abandoned';
       this.log('face', 'second face in frame: sitting stopped, nothing kept');
       return this.stage;
@@ -112,15 +119,17 @@ const pauseText: Record<Exclude<PauseReason, 'starting'>, string> = {
   'no-face': 'sitter lost: lens capped',
   lighting: 'light out of range: lens capped',
   framing: 'out of frame: lens capped',
+  crowd: 'second face in frame: lens capped',
   away: 'studio window left: lens capped',
 };
 
 export const pauseCopy: Record<PauseReason, string> = {
-  starting: 'The photographer is preparing the plate…',
+  starting: 'Preparing the studio: loading the camera and the SDK models (slower on a slow connection)…',
   talking: 'Hold still… no talking, the plate is exposing.',
   motion: 'Hold still. The plate blurs when you move.',
   'no-face': 'The photographer cannot see you.',
   lighting: 'The light is wrong. Face a lamp or a window.',
   framing: 'Sit square to the camera, face centred.',
+  crowd: 'Someone else is in frame. The plate is for one sitter.',
   away: 'The lens is capped while the studio is in the background.',
 };

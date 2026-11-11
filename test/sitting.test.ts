@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Sitting, MAX_EXPOSURE_S, type SittingInputs } from '../src/renderer/sitting/machine';
+import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, type SittingInputs } from '../src/renderer/sitting/machine';
 
 const still: SittingInputs = {
   readiness: 'ok', talking: false, windowFocused: true, running: true,
@@ -47,10 +47,20 @@ describe('Sitting', () => {
     expect(s.stage).toBe('heart');
   });
 
-  it('abandons the sitting when a second face appears', () => {
+  it('caps the lens on a brief second-face flicker but keeps the sitting', () => {
     const s = new Sitting();
     run(s, 10);
-    s.tick(0.1, { ...still, readiness: 'multiple-faces' });
+    s.tick(0.5, { ...still, readiness: 'multiple-faces' });
+    expect(s.stage).toBe('focusing');
+    expect(s.pause).toBe('crowd');
+    run(s, 1);
+    expect(s.pause).toBeNull();
+  });
+
+  it('abandons the sitting when a second face stays', () => {
+    const s = new Sitting();
+    run(s, 10);
+    for (let t = 0; t < SECOND_FACE_ABANDON_S + 0.2; t += 0.1) s.tick(0.1, { ...still, readiness: 'multiple-faces' });
     expect(s.stage).toBe('abandoned');
   });
 

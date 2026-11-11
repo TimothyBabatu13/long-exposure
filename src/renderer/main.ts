@@ -102,6 +102,7 @@ let netCount = 0;
 let focused = true;
 let running = false;
 let readiness: Readiness = 'no-face';
+let readinessHint = '';
 let talking = false;
 let blinking = false;
 let lastBlinkAt = 0;
@@ -125,7 +126,7 @@ let opts = { sound: true, ghosts: true, gentle: false, mirror: false, name: 'Sit
 function resetSitting(): void {
   cancelAnimationFrame(raf);
   beats.reset(); breath.reset();
-  sitting = null; running = false; readiness = 'no-face'; talking = false; blinking = false;
+  sitting = null; running = false; readiness = 'no-face'; readinessHint = ''; talking = false; blinking = false;
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
   ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity;
   plate = null; pair = null; replayText = null;
@@ -198,10 +199,10 @@ function onSource(e: SourceEvent): void {
   if (!sitting) return;
   switch (e.type) {
     case 'running': running = e.running; return;
-    case 'readiness': readiness = e.readiness; return;
+    case 'readiness': readiness = e.readiness; readinessHint = e.hint; return;
     case 'error':
       toast(e.message);
-      if (e.fatal) { void stopSource(); show('welcome'); }
+      if (e.fatal) { void stopSource(); resetSitting(); show('welcome'); }
       return;
     case 'packet': break;
   }
@@ -311,7 +312,9 @@ function frame(dt: number): void {
   renderer.render(state);
 
   $('progress-fill').style.width = `${sitting.progress * 100}%`;
-  $('caption').textContent = sitting.pause ? pauseCopy[sitting.pause] : stageCopy[stage];
+  // For framing problems the SDK's own hint ("chest not visible", "face too low"…) is more useful than ours.
+  $('caption').textContent = sitting.pause === 'framing' && readinessHint ? readinessHint
+    : sitting.pause ? pauseCopy[sitting.pause] : stageCopy[stage];
 
   if (opts.mirror && source?.preview) {
     const v = $<HTMLVideoElement>('mirror');
