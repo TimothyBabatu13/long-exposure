@@ -54,6 +54,8 @@ async function init(): Promise<void> {
   });
   for (const id of ['btn-leave', 'btn-leave2']) $(id).addEventListener('click', leaveStudio);
   $('btn-again').addEventListener('click', () => { void stopSource(); resetSitting(); show('welcome'); });
+  // Mute or replay the finished plate's heartbeat; playing again restarts the fade.
+  $('btn-sound').addEventListener('click', () => { heart.enabled = !heart.enabled; resultBeats = 0; updateSoundButton(); });
   $('btn-flip').addEventListener('click', () => $('flip').classList.toggle('turned'));
   $('btn-gif').addEventListener('click', () => void exportGif());
   $('btn-png').addEventListener('click', () => void exportPng());
@@ -194,13 +196,23 @@ async function begin(): Promise<void> {
   }
   let last = performance.now();
   const loop = (now: number) => {
+    raf = requestAnimationFrame(loop);
+    // Capped frame rate: the SDK shares the CPU, and the plate's motion is slow.
+    if (now - last < 1000 / STUDIO_FPS - 2) return;
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     frame(dt);
-    raf = requestAnimationFrame(loop);
   };
   raf = requestAnimationFrame(loop);
 }
+
+/** Redraw rates. The plate moves slowly (flush, breath), so these look smooth and keep the fan quiet. */
+const STUDIO_FPS = 30;
+const RESULT_FPS = 24;
+/** On the finished plate the heartbeat plays this many beats, then fades out over RESULT_FADE_BEATS. */
+const RESULT_BEATS = 8;
+const RESULT_FADE_BEATS = 4;
+const RESULT_VOLUME = 0.25;
 
 function onSource(e: SourceEvent): void {
   if (!sitting) return;
@@ -414,19 +426,34 @@ function showPlate(p: Plate): void {
   drawVerso(back, p);
   $('endcard').textContent = `0 frames saved · 0 bytes sent by this app · 1 plate made${p.verso.source !== 'live' ? ` · ${p.verso.source.toUpperCase()} DATA` : ''}`;
   const t0 = performance.now();
-  let lastTravel = 1;
+  let lastTravel = 1, lastDraw = -Infinity;
+  resultBeats = 0;
   cancelAnimationFrame(resultRaf);
-  heart.volume = 0.25;
+  updateSoundButton();
   const loop = (now: number) => {
+    if (!$('result').classList.contains('active')) return;
+    resultRaf = requestAnimationFrame(loop);
+    if (now - lastDraw < 1000 / RESULT_FPS - 2) return;
+    lastDraw = now;
     const t = (now - t0) / 1000;
     const f = plateFrameAt(p, t, { gentle: opts.gentle, ghosts: opts.ghosts });
     front.render(f);
-    // Keep the heartbeat going on the finished plate, quietly: travel restarts at each beat.
-    if (f.travel < lastTravel) heart.beat(0);
+    // The finished plate beats a few times, quietly, then fades to silence
+    // (travel restarts at each beat). The plate itself keeps beating visually.
+    if (f.travel < lastTravel) {
+      const fade = 1 - Math.max(0, resultBeats - RESULT_BEATS) / RESULT_FADE_BEATS;
+      if (fade > 0 && heart.enabled) { heart.volume = RESULT_VOLUME * fade; heart.beat(0); }
+      resultBeats++;
+    }
     lastTravel = f.travel;
-    if ($('result').classList.contains('active')) resultRaf = requestAnimationFrame(loop);
   };
   resultRaf = requestAnimationFrame(loop);
+}
+
+let resultBeats = 0;
+
+function updateSoundButton(): void {
+  $('btn-sound').textContent = heart.enabled ? 'Mute heartbeat' : 'Play heartbeat';
 }
 
 function pairWith(text: string): void {
@@ -442,8 +469,11 @@ function pairWith(text: string): void {
   $('flip').after(wrap);
   const ra = new PlateRenderer(a, 560), rb = new PlateRenderer(b, 560);
   const t0 = performance.now();
+  let lastDraw = -Infinity;
   const loop = (now: number) => {
     if (!wrap.isConnected) { ra.dispose(); rb.dispose(); return; }
+    if (now - lastDraw < 1000 / RESULT_FPS - 2) { requestAnimationFrame(loop); return; }
+    lastDraw = now;
     const t = (now - t0) / 1000;
     ra.render(plateFrameAt(plate!, t, { gentle: opts.gentle, ghosts: opts.ghosts }));
     rb.render(plateFrameAt(pair!, t, { gentle: opts.gentle, ghosts: opts.ghosts }));

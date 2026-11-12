@@ -146,6 +146,8 @@ if (process.env.LE_SMOKE_DIR) {
       await wait(14); await shot('3-heart');
       await wait(16); await shot('4-breath');
       await wait(30); await shot('5-result');
+      // Optional: stay on the result screen (e.g. to measure CPU), seconds.
+      await wait(Number(process.env.LE_SMOKE_HOLD ?? 0));
       await win.webContents.executeJavaScript("document.getElementById('btn-flip').click()");
       await wait(1.2); await shot('6-verso');
       app.quit();
