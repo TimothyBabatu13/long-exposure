@@ -60,8 +60,11 @@ async function init(): Promise<void> {
   $('btn-verso').addEventListener('click', () => void save('verso.png', canvasPng($('back')), 'PNG image', 'png'));
   $('btn-plate').addEventListener('click', () => plate && void save(`${slug()}.plate.json`, Promise.resolve(plateJson(plate)), 'Plate', 'json'));
   $('btn-record').addEventListener('click', () => {
-    const rec = source instanceof LiveSource ? source.takeRecording() : null;
-    if (rec) void save('sitting.ndjson', Promise.resolve(rec), 'Session recording', 'ndjson');
+    // The live source is stopped (and dropped) when the plate develops, so the
+    // recording is taken from it at that moment and kept here until saved or wiped.
+    const rec = source instanceof LiveSource ? source.takeRecording() : lastRecording;
+    if (!rec) { toast('No session recording is available for this sitting.'); return; }
+    void save(`${slug()}.ndjson`, Promise.resolve(rec), 'Session recording', 'ndjson');
   });
   if (bridge) $('btn-pair').addEventListener('click', async () => { const t = await bridge.openPlate(); if (t) pairWith(t); });
   else { $('btn-pair').hidden = true; $('pair-web').hidden = false; }
@@ -103,6 +106,8 @@ let focused = true;
 let running = false;
 let readiness: Readiness = 'no-face';
 let readinessHint = '';
+/** NDJSON of the last live sitting, kept in memory only until saved, a new sitting, or Leave. */
+let lastRecording: string | null = null;
 let talking = false;
 let blinking = false;
 let lastBlinkAt = 0;
@@ -126,6 +131,7 @@ let opts = { sound: true, ghosts: true, gentle: false, mirror: false, name: 'Sit
 function resetSitting(): void {
   cancelAnimationFrame(raf);
   beats.reset(); breath.reset();
+  lastRecording = null;
   sitting = null; running = false; readiness = 'no-face'; readinessHint = ''; talking = false; blinking = false;
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
   ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity;
@@ -478,6 +484,7 @@ function slug(): string {
 
 async function stopSource(): Promise<void> {
   const s = source;
+  if (s instanceof LiveSource) lastRecording = s.takeRecording() ?? lastRecording;
   source = null;
   $('lens-dot').classList.remove('open');
   $('lens-text').textContent = 'Lens closed';
