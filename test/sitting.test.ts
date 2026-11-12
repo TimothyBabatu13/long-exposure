@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, type SittingInputs } from '../src/renderer/sitting/machine';
+import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, type SittingInputs } from '../src/renderer/sitting/machine';
 
 const still: SittingInputs = {
   readiness: 'ok', talking: false, windowFocused: true, running: true,
@@ -26,10 +26,33 @@ describe('Sitting', () => {
     const before = s.exposure;
     run(s, 3, { talking: true });
     expect(s.pause).toBe('talking');
-    expect(s.exposure).toBeCloseTo(before, 5);
+    // The clock runs only for the cap delay, then stops.
+    expect(s.exposure).toBeGreaterThan(before);
+    expect(s.exposure).toBeLessThanOrEqual(before + CAP_DELAY_S + 1e-9);
     run(s, 1);
     expect(s.pause).toBeNull();
     expect(s.ledger.some((e) => e.text.includes('speech'))).toBe(true);
+  });
+
+  it('ignores flickering talk and framing flags (no cap, no ledger noise)', () => {
+    const s = new Sitting();
+    run(s, 5);
+    const pauses = () => s.ledger.filter((e) => e.kind !== 'stage' || e.text.includes('uncapped')).length;
+    const entries = pauses();
+    for (let k = 0; k < 40; k++) {
+      s.tick(0.1, { ...still, talking: k % 2 === 0 });
+      s.tick(0.1, { ...still, readiness: k % 3 === 0 ? 'framing' : 'ok' });
+    }
+    expect(s.pause).toBeNull();
+    expect(pauses()).toBe(entries);
+    expect(s.exposure).toBeGreaterThan(12);
+  });
+
+  it('caps at once when the window is left', () => {
+    const s = new Sitting();
+    run(s, 5);
+    s.tick(0.1, { ...still, windowFocused: false });
+    expect(s.pause).toBe('away');
   });
 
   it('pauses when the window loses focus (no background sensing)', () => {

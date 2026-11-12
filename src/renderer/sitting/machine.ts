@@ -30,6 +30,12 @@ export const MAX_EXPOSURE_S = 120;
 const FIX_DURATION_S = 3;
 /** A second face must persist this long before the sitting is abandoned (single-frame detector flickers are ignored). */
 export const SECOND_FACE_ABANDON_S = 2;
+/** A flickering problem must last this long before the lens caps (seconds). */
+export const CAP_DELAY_S = 0.5;
+/** ...and be gone this long before it uncaps. */
+export const UNCAP_DELAY_S = 0.3;
+/** Pauses that cap at once: privacy (window left, second face) and start-up. */
+const IMMEDIATE_PAUSES: ReadonlySet<PauseReason> = new Set(['away', 'crowd', 'starting']);
 
 export class Sitting {
   stage: Stage = 'focusing';
@@ -39,6 +45,8 @@ export class Sitting {
   readonly ledger: LedgerEntry[] = [];
   private fixedAt: number | null = null;
   private secondFaceFor = 0;
+  private pending: PauseReason | null = null;
+  private pendingFor = 0;
 
   constructor(private onLedger: (e: LedgerEntry) => void = () => {}) {}
 
@@ -77,13 +85,25 @@ export class Sitting {
       return this.stage;
     }
 
-    const p = this.pauseFor(i);
-    if (p !== this.pause) {
-      if (p && p !== 'starting') this.log(p === 'talking' ? 'talk' : p === 'motion' ? 'motion' : 'face', pauseText[p]);
-      else if (!p && this.pause && this.pause !== 'starting') this.log('stage', 'still again: lens uncapped');
-      this.pause = p;
+    // The SDK's readiness and talking flags flicker frame to frame. A problem
+    // must last CAP_DELAY_S before the lens caps, and be gone for UNCAP_DELAY_S
+    // before it uncaps, so brief flickers neither stop the clock nor fill the
+    // ledger. Leaving the window, a second face and start-up cap at once.
+    const raw = this.pauseFor(i);
+    if (raw === this.pause) {
+      this.pendingFor = 0;
+    } else {
+      if (raw === this.pending) this.pendingFor += dt;
+      else { this.pending = raw; this.pendingFor = dt; }
+      const need = raw == null ? UNCAP_DELAY_S : IMMEDIATE_PAUSES.has(raw) ? 0 : CAP_DELAY_S;
+      if (this.pendingFor >= need) {
+        if (raw && raw !== 'starting') this.log(raw === 'talking' ? 'talk' : raw === 'motion' ? 'motion' : 'face', pauseText[raw]);
+        else if (!raw && this.pause && this.pause !== 'starting') this.log('stage', 'still again: lens uncapped');
+        this.pause = raw;
+        this.pendingFor = 0;
+      }
     }
-    if (p) return this.stage;
+    if (this.pause) return this.stage;
 
     this.exposure += dt;
     const e = this.exposure;
