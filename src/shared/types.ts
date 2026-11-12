@@ -109,8 +109,17 @@ export interface SealParams {
 
 /** What the preload exposes on window.studio. */
 export interface StudioBridge {
-  config(): Promise<{ hasApiKey: boolean; apiKey: string; telemetry: boolean; record: boolean; version: string }>;
+  config(): Promise<{ hasApiKey: boolean; telemetry: boolean; record: boolean; version: string }>;
   saveFile(opts: { defaultName: string; data: Uint8Array | string; filters: { name: string; extensions: string[] }[] }): Promise<string | null>;
   openPlate(): Promise<string | null>;
   onNetwork(cb: (entry: { url: string; bytes: number; blocked: boolean }) => void): void;
+  /** The SmartSpectra session in the main process (native camera). Each on* returns an unsubscribe. */
+  sdk: {
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    onMetrics(cb: (buf: Uint8Array) => void): () => void;
+    onValidation(cb: (code: number, hint: string) => void): () => void;
+    onRunning(cb: (running: boolean) => void): () => void;
+    onError(cb: (code: number, message: string) => void): () => void;
+  };
 }

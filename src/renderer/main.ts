@@ -19,7 +19,7 @@ const bridge = window.studio;
 // ---------------------------------------------------------------------------
 // Configuration and the welcome screen
 // ---------------------------------------------------------------------------
-let config = { hasApiKey: false, apiKey: '', telemetry: false, record: false, version: 'web' };
+let config = { hasApiKey: false, telemetry: false, record: false, version: 'web' };
 let replayText: string | null = null;
 
 async function init(): Promise<void> {
@@ -137,6 +137,7 @@ function resetSitting(): void {
 }
 
 function addLedger(e: LedgerEntry): void {
+  console.log(`[studio] ledger ${e.at.toFixed(1)}s ${e.kind}: ${e.text}`);
   const li = document.createElement('li');
   const mm = Math.floor(e.at / 60), ss = Math.floor(e.at % 60).toString().padStart(2, '0');
   const b = document.createElement('b');
@@ -163,7 +164,7 @@ async function begin(): Promise<void> {
   replayText = pending;
 
   if (replayText) source = new ReplaySource(replayText);
-  else if (!isWeb && bridge && config.hasApiKey) source = new LiveSource(config.apiKey, config.telemetry, config.record);
+  else if (!isWeb && bridge && config.hasApiKey) source = new LiveSource(bridge, opts.mirror, config.record);
   else source = new SyntheticSource();
   $('net-source').textContent = source.kind;
   $('btn-record').hidden = !(source.kind === 'live' && config.record);
@@ -201,6 +202,7 @@ function onSource(e: SourceEvent): void {
     case 'running': running = e.running; return;
     case 'readiness': readiness = e.readiness; readinessHint = e.hint; return;
     case 'error':
+      console.log(`[studio] error (fatal=${e.fatal}): ${e.message}`);
       toast(e.message);
       if (e.fatal) { void stopSource(); resetSitting(); show('welcome'); }
       return;

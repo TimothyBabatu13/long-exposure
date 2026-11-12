@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { bindSmartSpectraIpc } from '@smartspectra/node-sdk/main';
+import { bindStudioSdk } from './sdk';
 
 // ---------------------------------------------------------------------------
 // Configuration: the API key comes from the environment or a local .env file.
@@ -49,7 +49,14 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  bindSmartSpectraIpc(win);
+  bindStudioSdk(win, apiKey, telemetry);
+  // Diagnostics: renderer lines tagged [studio] are echoed to the terminal so a
+  // sitting can be followed from the log. They carry stage, pause and SDK
+  // status text only: never frames, landmarks or vital-sign values.
+  win.webContents.on('console-message', (e) => {
+    const msg = (e as unknown as { message?: string }).message ?? '';
+    if (msg.startsWith('[studio]')) console.log(msg);
+  });
 
   // Never navigate away from the studio or open new windows.
   win.webContents.on('will-navigate', (e, url) => {
@@ -93,7 +100,6 @@ app.whenReady().then(() => {
 
   ipcMain.handle('studio:config', () => ({
     hasApiKey: apiKey.length > 0,
-    apiKey,
     telemetry,
     // Developer option: keep received signals in memory so a replay can be saved.
     record: env.SMARTSPECTRA_RECORD === '1',

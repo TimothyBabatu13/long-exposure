@@ -4,7 +4,7 @@
 //   replay:    a session recorded earlier with the live source
 //   synthetic: generated data for UI development and the web demo, labelled
 //              as such everywhere. Never presented as a measurement.
-import type { SourceEvent, SourceKind, SignalPacket } from '../../shared/types';
+import type { SourceEvent, SourceKind, SignalPacket, StudioBridge } from '../../shared/types';
 import { metricsToPacket, readinessFromCode } from './metrics';
 import { syntheticPacket } from './synthetic';
 
@@ -21,8 +21,8 @@ export interface SignalSource {
 
 const now = () => Date.now() / 1000;
 
-/** Camera request for the live sitting (see LiveSource.start). */
-export const CAMERA = { width: 640, height: 480, fps: 30, minFps: 24 } as const;
+/** Mirror preview size (the SDK reads the camera itself, natively). */
+export const PREVIEW = { width: 320, height: 240 } as const;
 
 /** SmartSpectraErrorCode values after which the SDK session is over. */
 const SESSION_ENDING_ERRORS = new Set([2, 3, 4, 5, 6, 7, 8, 13, 14]);
@@ -43,13 +43,19 @@ export class LiveSource implements SignalSource {
   readonly kind = 'live' as const;
   preview: MediaStream | null = null;
   private cb: Listener = () => {};
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private sdk: any = null;
   private recording: { at: number; e: SourceEvent }[] | null = null;
-  private stream: MediaStream | null = null;
+  private unsubscribe: (() => void)[] = [];
+  private diag = 0;
   private t0 = 0;
 
-  constructor(private apiKey: string, private telemetry: boolean, record = false) {
+  /**
+   * The SDK runs in the main process on the native camera (src/main/sdk.ts):
+   * the renderer path copied every frame across processes and starved slower
+   * laptops into kSustainedLowFrameRate (14). This class only decodes results.
+   * `wantPreview` opens a separate small preview stream for the mirror; if the
+   * camera cannot be shared, the mirror stays off and the sitting continues.
+   */
+  constructor(private bridge: StudioBridge, private wantPreview: boolean, record = false) {
     if (record) this.recording = [];
   }
 
@@ -61,61 +67,60 @@ export class LiveSource implements SignalSource {
   }
 
   async start(): Promise<void> {
-    const r = await import('@smartspectra/node-sdk/renderer');
     const { decodeMetrics } = await import('@smartspectra/node-sdk/messages');
     this.t0 = now();
-    this.sdk = new r.SmartSpectraSDK({
-      apiKey: this.apiKey,
-      requestedMetrics: [...r.cardioMetrics, ...r.breathingMetrics, ...r.faceMetrics],
-      enableTelemetry: this.telemetry,
-    });
-    // We open the camera ourselves at 640x480 instead of the SDK default of
-    // 1280x720. Renderer frames are copied to the main process as raw RGBA, so
-    // 720p at 30 fps is ~110 MB/s and starves slower laptops into
-    // kSustainedLowFrameRate (14). 640x480 is a third of that and still frames
-    // a head and upper chest comfortably.
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: 'user',
-        width: { ideal: CAMERA.width },
-        height: { ideal: CAMERA.height },
-        frameRate: { ideal: CAMERA.fps, min: CAMERA.minFps },
-      },
-    });
-    this.preview = this.stream;
-    this.sdk.useMediaStream(this.stream);
-    this.sdk.on('metrics', (buf: Uint8Array) => {
-      const packet = metricsToPacket(decodeMetrics(buf), now());
-      this.emit({ type: 'packet', packet });
-    });
-    this.sdk.on('validationStatus', (code: number, _ts: number, hint: string) =>
-      this.emit({ type: 'readiness', readiness: readinessFromCode(code), hint }));
-    this.sdk.on('processingStatus', (status: number) =>
-      this.emit({ type: 'running', running: status === r.ProcessingStatus.kRunning }));
-    // An error that ends the SDK session must end the sitting too; otherwise
-    // the camera keeps feeding a stopped SDK ("not in a valid state").
-    this.sdk.on('error', (code: number, message: string) =>
-      this.emit({ type: 'error', message: friendlyError(code, message), fatal: SESSION_ENDING_ERRORS.has(code) }));
+    const sdk = this.bridge.sdk;
+    let packets = 0, lastCode = -1;
+    this.unsubscribe = [
+      sdk.onMetrics((buf) => {
+        packets++;
+        this.emit({ type: 'packet', packet: metricsToPacket(decodeMetrics(buf), now()) });
+      }),
+      sdk.onValidation((code, hint) => {
+        if (code !== lastCode) { lastCode = code; console.log(`[studio] readiness code ${code}${hint ? `: ${hint}` : ''}`); }
+        this.emit({ type: 'readiness', readiness: readinessFromCode(code), hint });
+      }),
+      sdk.onRunning((running) => {
+        console.log(`[studio] SDK running: ${running}`);
+        this.emit({ type: 'running', running });
+      }),
+      // An error that ends the SDK session must end the sitting too.
+      sdk.onError((code, message) =>
+        this.emit({ type: 'error', message: friendlyError(code, message), fatal: SESSION_ENDING_ERRORS.has(code) })),
+    ];
+    this.diag = window.setInterval(() => {
+      console.log(`[studio] SDK result packets: ${(packets / 5).toFixed(1)}/s`);
+      packets = 0;
+    }, 5000);
     try {
-      await this.sdk.start();
+      await sdk.start();
     } catch (err) {
       await this.stop();
       throw err;
     }
+    if (this.wantPreview) void this.openPreview();
+  }
+
+  private async openPreview(): Promise<void> {
+    try {
+      this.preview = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: 'user', width: { ideal: PREVIEW.width }, height: { ideal: PREVIEW.height } },
+      });
+      console.log('[studio] mirror preview on');
+    } catch (err) {
+      console.log(`[studio] mirror preview unavailable (camera not shareable): ${(err as Error).name}`);
+      this.preview = null;
+    }
   }
 
   async stop(): Promise<void> {
-    const sdk = this.sdk;
-    this.sdk = null;
-    try { if (sdk) await sdk.stop(); } catch { /* already stopped */ }
-    finally {
-      try { sdk?.destroy(); } catch { /* ignore */ }
-      // We own the stream (useMediaStream), so we release the camera.
-      this.stream?.getTracks().forEach((t) => t.stop());
-      this.stream = null;
-      this.preview = null;
-    }
+    window.clearInterval(this.diag);
+    this.unsubscribe.forEach((u) => u());
+    this.unsubscribe = [];
+    this.preview?.getTracks().forEach((t) => t.stop());
+    this.preview = null;
+    try { await this.bridge.sdk.stop(); } catch { /* already stopped */ }
   }
 
   /** NDJSON of everything received, for building replays. Memory only until saved. */

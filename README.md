@@ -105,8 +105,8 @@ Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save sessi
 ```
  Electron main process                         Renderer (sandboxed, context-isolated)
  ┌───────────────────────────────┐             ┌───────────────────────────────────────────┐
- │ bindSmartSpectraIpc(window)   │◄─frames──── │ SmartSpectraSDK (renderer) ◄─ camera      │
- │  └ SmartSpectra native SDK    │──metrics──► │  └ metricsToPacket()  → SignalPacket      │
+ │ camera ─► SmartSpectraSDK     │──metrics──► │ LiveSource: metricsToPacket() → packet    │
+ │   (native, src/main/sdk.ts)   │  (no frames)│  (optional small mirror preview)          │
  │ permission handler: camera    │             │ BeatTracker  (waveform → beats)           │
  │   only, own page only         │             │ BreathTracker (chest trace / rate)        │
  │ webRequest: block + log all   │──ledger───► │ Sitting      (stages, lens cap, ledger)   │
@@ -120,8 +120,9 @@ Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save sessi
   - Raw WebGL2 with one fragment shader; there is no UI framework and no 3D engine, which keeps memory low.
   - Web Audio for the heartbeat sound, gifenc for GIF export, Vitest for tests.
 - **SDK integration:**
-  - The renderer-side `@smartspectra/node-sdk/renderer` captures the camera.
-  - `bindSmartSpectraIpc` runs the native pipeline in the main process.
+  - The SDK runs in the Electron main process and reads the camera natively ([`src/main/sdk.ts`](src/main/sdk.ts)), the same path as `npm run spike`. Only decoded results cross to the window; frames never do, and the API key never leaves the main process.
+  - Why: the SDK's renderer path copies every frame across processes as raw pixels. On a 4-core laptop only 8–18 of the camera's 30 fps got through, and the SDK stopped with `kSustainedLowFrameRate` (code 14). Natively, results arrive at 30/s.
+  - "Show me the camera" opens a separate small preview. Windows may refuse to share the camera (`NotReadableError`); the mirror then stays off and the sitting continues.
   - It requests the cardio, breathing and face metric groups.
   - Decoding uses `@smartspectra/node-sdk/messages`. See [`src/renderer/signal/metrics.ts`](src/renderer/signal/metrics.ts).
 
