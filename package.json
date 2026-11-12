@@ -20,7 +20,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "spike": "node scripts/spike.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "render:plate": "node scripts/render-plate.mjs"
   },
   "build": {
     "appId": "dev.longexposure.app",

@@ -25,7 +25,7 @@ export default defineConfig({
     root: 'src/renderer',
     define: { __WEB_BUILD__: 'false' },
     build: {
-      rolldownOptions: { input: { index: resolve('src/renderer/index.html') } },
+      rolldownOptions: { input: { index: resolve('src/renderer/index.html'), harness: resolve('src/renderer/harness.html') } },
     },
   },
 });

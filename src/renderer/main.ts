@@ -296,7 +296,8 @@ function frame(dt: number): void {
   }
 
   // Accumulate the face geometry over still moments for the final plate.
-  if (face && sitting.pause == null) {
+  // (silent too: a brief word no longer caps the lens, but it would open the mouth on the plate).
+  if (face && sitting.pause == null && !talking) {
     if (faceSum && faceSum.length === face.length) {
       faceSum = faceSum.map((q, i) => ({ x: q.x + face![i].x, y: q.y + face![i].y }));
       faceN++;

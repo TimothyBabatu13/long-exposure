@@ -72,7 +72,7 @@ function createWindow(): BrowserWindow {
   return win;
 }
 
-app.whenReady().then(() => {
+if (!process.env.LE_HARNESS) app.whenReady().then(() => {
   // Grant only the camera, only to our own bundled page.
   session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
     const url = details?.requestingUrl || wc?.getURL() || '';
@@ -152,5 +152,37 @@ if (process.env.LE_SMOKE_DIR) {
       await wait(1.2); await shot('6-verso');
       app.quit();
     });
+  });
+}
+
+// Render harness (npm run render:plate): draws a plate from a recorded sitting
+// in fixed states and writes PNGs. Dev only; active only when LE_HARNESS is set.
+if (process.env.LE_HARNESS) {
+  const rec = process.env.LE_HARNESS;
+  const outDir = process.env.LE_HARNESS_OUT ?? 'renders';
+  app.whenReady().then(async () => {
+    const { normalise } = await import('../renderer/render/landmarks');
+    const { mkdirSync, readFileSync: read } = await import('node:fs');
+    // Average the normalised face over the sitting, as the app does for the plate.
+    let sum: { x: number; y: number }[] | null = null, n = 0, talking = false;
+    for (const line of read(rec, 'utf8').split('\n')) {
+      if (line.includes('"talking"')) { const t = JSON.parse(line).e?.packet?.talking; if (t?.length) talking = !!t[t.length - 1].detected; }
+      if (!line.includes('"landmarks"') || talking) continue;
+      const pts = JSON.parse(line).e?.packet?.landmarks?.points as { x: number; y: number }[] | undefined;
+      if (!pts?.length) continue;
+      const f = normalise(pts);
+      if (!sum || sum.length !== f.length) { sum = f.map((q) => ({ ...q })); n = 1; }
+      else { sum = sum.map((q, i) => ({ x: q.x + f[i].x, y: q.y + f[i].y })); n++; }
+    }
+    if (!sum) { console.error('No landmarks in', rec); app.exit(1); return; }
+    const face = sum.map((q) => ({ x: q.x / n, y: q.y / n }));
+    const win = new BrowserWindow({ show: false, width: 800, height: 800, webPreferences: { contextIsolation: true, sandbox: true } });
+    if (devUrl) await win.loadURL(`${devUrl}/harness.html`);
+    else await win.loadFile(join(import.meta.dirname, '../renderer/harness.html'));
+    const shots = await win.webContents.executeJavaScript(`window.__harness(${JSON.stringify(face)}, 720)`) as { name: string; png: string }[];
+    mkdirSync(outDir, { recursive: true });
+    for (const s of shots) writeFileSync(join(outDir, `${s.name}.png`), Buffer.from(s.png.split(',')[1], 'base64'));
+    console.log(`Rendered ${shots.length} images from ${n} face frames into ${outDir}`);
+    app.exit(0);
   });
 }

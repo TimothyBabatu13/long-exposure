@@ -7,3 +7,4 @@ recordings/
 *.plate.json
 !samples/*.plate.json
 smoke/
+renders/
