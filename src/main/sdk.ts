@@ -48,6 +48,8 @@ export function bindStudioSdk(win: BrowserWindow, apiKey: string, telemetry: boo
     s.on('validationStatus', (code: number, _ts: number, hint: string) => { if (live()) send('studio:sdk:validation', code, hint ?? ''); });
     s.on('processingStatus', (status: number) => { if (live()) send('studio:sdk:running', status === ProcessingStatus.kRunning); });
     s.on('error', (code: number, message: string) => { if (live()) send('studio:sdk:error', code, message); });
+    // HRV may arrive only in accumulated results; the window takes HRV from these.
+    s.on('accumulatedMetrics', (buf: Uint8Array) => { if (live()) send('studio:sdk:accumulated', new Uint8Array(buf)); });
     sdk = s;
     s.useCamera(CameraSelection.default); // the spike's camera setup: SDK defaults
     s.start();

@@ -70,11 +70,20 @@ export class LiveSource implements SignalSource {
     const { decodeMetrics } = await import('@smartspectra/node-sdk/messages');
     this.t0 = now();
     const sdk = this.bridge.sdk;
-    let packets = 0, lastCode = -1;
+    let packets = 0, lastCode = -1, sawHrv = false;
     this.unsubscribe = [
       sdk.onMetrics((buf) => {
         packets++;
-        this.emit({ type: 'packet', packet: metricsToPacket(decodeMetrics(buf), now()) });
+        const packet = metricsToPacket(decodeMetrics(buf), now());
+        if (packet.hrv && !sawHrv) { sawHrv = true; console.log('[studio] HRV received (live results)'); }
+        this.emit({ type: 'packet', packet });
+      }),
+      // Accumulated results repeat earlier traces, so only HRV is taken from them.
+      sdk.onAccumulated((buf) => {
+        const p = metricsToPacket(decodeMetrics(buf), now());
+        if (!p.hrv) return;
+        if (!sawHrv) { sawHrv = true; console.log('[studio] HRV received (accumulated results)'); }
+        this.emit({ type: 'packet', packet: { arrival: p.arrival, hrv: p.hrv } });
       }),
       sdk.onValidation((code, hint) => {
         if (code !== lastCode) { lastCode = code; console.log(`[studio] readiness code ${code}${hint ? `: ${hint}` : ''}`); }

@@ -22,6 +22,7 @@ const studio: StudioBridge = {
     start: () => ipcRenderer.invoke('studio:sdk:start'),
     stop: () => ipcRenderer.invoke('studio:sdk:stop'),
     onMetrics: (cb) => listen<[Uint8Array]>('studio:sdk:metrics', cb),
+    onAccumulated: (cb) => listen<[Uint8Array]>('studio:sdk:accumulated', cb),
     onValidation: (cb) => listen<[number, string]>('studio:sdk:validation', cb),
     onRunning: (cb) => listen<[boolean]>('studio:sdk:running', cb),
     onError: (cb) => listen<[number, string]>('studio:sdk:error', cb),

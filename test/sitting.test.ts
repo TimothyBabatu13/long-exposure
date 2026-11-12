@@ -64,9 +64,20 @@ describe('Sitting', () => {
     expect(s.stage).toBe('abandoned');
   });
 
-  it('develops an underexposed plate if the signal never settles', () => {
+  it('fixes the plate without HRV when the pulse is still locked at 60 s', () => {
     const s = new Sitting();
-    run(s, MAX_EXPOSURE_S + 5, { hrvReady: false });
+    run(s, 61, { hrvReady: false });
+    expect(s.stage).toBe('fixing');
+    run(s, 4, { hrvReady: false });
+    expect(s.stage).toBe('developed');
+    expect(s.underexposed).toBe(false);
+  });
+
+  it('develops an underexposed plate if the pulse is lost and HRV never comes', () => {
+    const s = new Sitting();
+    run(s, 40);
+    expect(s.stage).toBe('breath');
+    run(s, MAX_EXPOSURE_S, { hrvReady: false, pulseReady: false });
     expect(s.underexposed).toBe(true);
     expect(s.stage).toBe('developed');
   });

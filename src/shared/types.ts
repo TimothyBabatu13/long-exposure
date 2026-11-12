@@ -118,6 +118,8 @@ export interface StudioBridge {
     start(): Promise<void>;
     stop(): Promise<void>;
     onMetrics(cb: (buf: Uint8Array) => void): () => void;
+    /** Accumulated results; used only for HRV, which may not arrive in onMetrics. */
+    onAccumulated(cb: (buf: Uint8Array) => void): () => void;
     onValidation(cb: (code: number, hint: string) => void): () => void;
     onRunning(cb: (running: boolean) => void): () => void;
     onError(cb: (code: number, message: string) => void): () => void;

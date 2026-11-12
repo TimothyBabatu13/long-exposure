@@ -345,7 +345,23 @@ const stageCopy: Record<Stage, string> = {
 };
 
 function currentSeal() {
-  return sealFrom({ bpm: pulse?.bpm ?? null, rpm: breathRate?.rpm ?? null, rmssd: hrv?.rmssd ?? null, sdnn: hrv?.sdnn ?? null });
+  // Without SDK HRV, the seal's variation comes from the beat-to-beat intervals
+  // of the detected pulse peaks. This only shapes the artwork; the verso never
+  // shows these as HRV readings.
+  const v = hrv ? { a: hrv.rmssd, b: hrv.sdnn } : beatVariation(beats.confirmedBeats);
+  return sealFrom({ bpm: pulse?.bpm ?? null, rpm: breathRate?.rpm ?? null, rmssd: v?.a ?? null, sdnn: v?.b ?? null });
+}
+
+/** Successive-difference and spread (ms) of the last beat intervals, or null if too few. */
+function beatVariation(beatTimes: readonly number[]): { a: number; b: number } | null {
+  const iv = beatTimes.slice(-31).slice(1).map((t, i) => (t - beatTimes.slice(-31)[i]) * 1000);
+  if (iv.length < 8) return null;
+  const diffs = iv.slice(1).map((x, i) => x - iv[i]);
+  const mean = iv.reduce((s, x) => s + x, 0) / iv.length;
+  return {
+    a: Math.sqrt(diffs.reduce((s, d) => s + d * d, 0) / diffs.length),
+    b: Math.sqrt(iv.reduce((s, x) => s + (x - mean) ** 2, 0) / iv.length),
+  };
 }
 
 // ---------------------------------------------------------------------------

@@ -5,7 +5,10 @@
 //   focusing  0-12 s   ghost portrait from landmarks
 //   heart     12-30 s  pulse locked: the face flushes with each beat
 //   breath    30-60 s  breathing locked: the bust breathes
-//   fixing    60 s+    HRV available: the seal is engraved, plate developed
+//   fixing    60 s+    rhythm settled (pulse still locked, or HRV): the seal is engraved
+//
+// HRV is a bonus, not a gate: in the first live sittings the SDK sent no HRV in
+// 230 s, so a plate that waited for it could never be fixed.
 import type { LedgerEntry, Readiness } from '../../shared/types';
 
 export type Stage = 'focusing' | 'heart' | 'breath' | 'fixing' | 'developed' | 'abandoned';
@@ -89,7 +92,9 @@ export class Sitting {
     // plate waits for the heart; it never pretends.
     if (this.stage === 'focusing' && e >= STAGE_AT.heart && i.pulseReady) this.enter('heart', 'pulse locked: exposing the heart');
     if (this.stage === 'heart' && e >= STAGE_AT.breath && i.breathReady) this.enter('breath', 'breathing locked: exposing the breath');
-    if (this.stage === 'breath' && e >= STAGE_AT.fixing && i.hrvReady) this.enter('fixing', 'rhythm settled: fixing the plate');
+    if (this.stage === 'breath' && e >= STAGE_AT.fixing && (i.hrvReady || i.pulseReady)) {
+      this.enter('fixing', i.hrvReady ? 'rhythm settled (with HRV): fixing the plate' : 'rhythm settled: fixing the plate');
+    }
 
     if (this.stage !== 'fixing' && e >= MAX_EXPOSURE_S) {
       this.underexposed = true;
