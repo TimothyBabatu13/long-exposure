@@ -313,7 +313,7 @@ function frame(dt: number): void {
     breath: breathing ? breath.value(wall) : 0.5,
     development: stage === 'developed' ? 1 : 0.12 + 0.88 * sitting.progress,
     ghosts, smile,
-    seal: fixing ? { params: currentSeal(), progress: Math.min(1, (sitting.exposure - 60) / 3) } : null,
+    seal: fixing && !sitting.underexposed ? { params: currentSeal(), progress: Math.min(1, (sitting.exposure - 60) / 3) } : null,
     capped: sitting.pause != null && sitting.pause !== 'starting',
     gentle: opts.gentle, time: wall,
   };
@@ -385,7 +385,7 @@ function finish(): void {
     blinkTimes,
     ghosts: opts.ghosts ? ghosts : [],
     smile,
-    seal: currentSeal(),
+    seal: sitting.underexposed ? null : currentSeal(),
     verso: {
       pulseBpm: pulse?.bpm ?? null,
       breathRpm: breathRate?.rpm ?? null,
@@ -396,6 +396,7 @@ function finish(): void {
       ledger: [...sitting.ledger],
       source: source?.kind ?? 'synthetic',
       underexposed: sitting.underexposed,
+      underexposedReason: sitting.underexposedReason,
     },
   };
   // The plate is made; release the camera now.

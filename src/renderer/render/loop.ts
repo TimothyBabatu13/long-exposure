@@ -30,7 +30,7 @@ export function plateFrameAt(plate: Plate, t: number, opts: { gentle: boolean; g
     development: 1,
     ghosts: opts.ghosts ? plate.ghosts : [],
     smile: plate.smile,
-    seal: { params: plate.seal, progress: 1 },
+    seal: plate.seal ? { params: plate.seal, progress: 1 } : null,
     capped: false,
     gentle: opts.gentle,
     time: t,

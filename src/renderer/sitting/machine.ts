@@ -28,6 +28,11 @@ export const STAGE_AT = { heart: 12, breath: 30, fixing: 60 } as const;
 /** If HRV never stabilises, the plate develops as "underexposed" at this point. */
 export const MAX_EXPOSURE_S = 120;
 const FIX_DURATION_S = 3;
+const UNDEREXPOSED_REASON = {
+  focusing: 'the pulse never settled',
+  heart: 'the breathing never settled',
+  breath: 'the pulse was lost before the plate could be fixed',
+} as const;
 /** A second face must persist this long before the sitting is abandoned (single-frame detector flickers are ignored). */
 export const SECOND_FACE_ABANDON_S = 2;
 /** A flickering problem must last this long before the lens caps (seconds). */
@@ -42,6 +47,8 @@ export class Sitting {
   exposure = 0;
   pause: PauseReason | null = 'starting';
   underexposed = false;
+  /** Which signal never settled, when the plate is underexposed. */
+  underexposedReason: string | null = null;
   readonly ledger: LedgerEntry[] = [];
   private fixedAt: number | null = null;
   private secondFaceFor = 0;
@@ -118,7 +125,9 @@ export class Sitting {
 
     if (this.stage !== 'fixing' && e >= MAX_EXPOSURE_S) {
       this.underexposed = true;
-      this.enter('fixing', 'the light was poor; the plate is underexposed');
+      // Name the signal that never settled, not a guess at the cause.
+      this.underexposedReason = UNDEREXPOSED_REASON[this.stage as 'focusing' | 'heart' | 'breath'] ?? UNDEREXPOSED_REASON.breath;
+      this.enter('fixing', `${this.underexposedReason}: the plate is underexposed`);
     }
     if (this.stage === 'fixing') {
       this.fixedAt ??= e;

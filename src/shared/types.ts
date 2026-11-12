@@ -79,7 +79,8 @@ export interface Plate {
   ghosts: Point[][];
   /** Lip contour captured if a smile was held for 3 s or more. */
   smile: Point[] | null;
-  seal: SealParams;
+  /** Null when the plate is underexposed: the seal marks a settled rhythm. */
+  seal: SealParams | null;
   /** Readouts for the verso only. Never drawn on the front. */
   verso: {
     pulseBpm: number | null;
@@ -91,6 +92,8 @@ export interface Plate {
     ledger: LedgerEntry[];
     source: SourceKind;
     underexposed: boolean;
+    /** Which signal never settled (plates from before 2026-11-12 lack it). */
+    underexposedReason?: string | null;
   };
 }
 

@@ -102,6 +102,8 @@ describe('Sitting', () => {
     expect(s.stage).toBe('breath');
     run(s, MAX_EXPOSURE_S, { hrvReady: false, pulseReady: false });
     expect(s.underexposed).toBe(true);
+    expect(s.underexposedReason).toBe('the pulse was lost before the plate could be fixed');
+    expect(s.ledger.some((e) => e.text.includes('light'))).toBe(false);
     expect(s.stage).toBe('developed');
   });
 });

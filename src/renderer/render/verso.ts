@@ -62,7 +62,7 @@ export function drawVerso(canvas: HTMLCanvasElement, plate: Plate): void {
   ctx.fillText('pulse waveform, last seconds of the sitting (unitless)', x0, y0 + h + 16 * u);
   ctx.fillText(tierText[plate.beatTier], x0, y0 + h + 32 * u);
   ctx.fillText(sourceText[v.source], x0, y0 + h + 48 * u);
-  if (v.underexposed) ctx.fillText('Underexposed: the signal never fully settled.', x0, y0 + h + 64 * u);
+  if (v.underexposed) ctx.fillText(`Underexposed: ${v.underexposedReason ?? 'the signal never fully settled'}. No seal.`, x0, y0 + h + 64 * u);
 
   // Cause log.
   ctx.fillStyle = '#d9cbb0';
