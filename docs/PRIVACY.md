@@ -6,7 +6,7 @@ Long Exposure reads a person's body through a camera. This page says exactly wha
 
 - **Nothing happens until the sitter agrees.** The camera is opened only after the sitter reads the sitting agreement and presses **I agree to sit** (or Enter). There is no auto-start, and the app never runs in the background.
 - **Consent is tied to the person in frame.** The plate needs a still, silent, face-on sitter for about a minute. You cannot make one of someone who is not deliberately taking part.
-- **One person only.** If the SDK reports a second face, the sitting stops immediately and everything collected so far is discarded.
+- **One person only.** If the SDK reports a second face, the lens caps at once (the clock stops). If the second face is seen for about 2 seconds in total, the sitting stops and everything collected so far is discarded. (The face detector flickers, so a single stray frame does not end a sitting, but a face that keeps flickering in still adds up.)
 - **The lens caps itself** whenever the sitter speaks, moves, leaves the frame, or switches away from the window (blur, minimise or hidden). The exposure clock stops, and the cap is logged in the Studio Ledger.
 - **A visible indicator** shows when the camera is on. The OS camera light is controlled by the OS and cannot be suppressed by the app.
 - **Leave the studio** is always one click away. It stops the camera, drops every value from memory and reloads the app.
