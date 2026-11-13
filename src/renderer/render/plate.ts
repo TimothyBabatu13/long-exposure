@@ -106,9 +106,12 @@ void main() {
 
   // The flush: a warm wave travelling forehead to chin with each heartbeat.
   float faceV = clamp((uv.y - uFaceTop) / max(0.01, uFaceBottom - uFaceTop), 0.0, 1.0);
-  float band = exp(-pow(faceV - uTravel, 2.0) / 0.06);
-  float flushAmt = uFlush * smoothstep(0.1, 0.6, face) * (0.45 + 0.55 * band) * mix(1.0, 0.55, uGentle);
-  image = mix(image, image * vec3(1.22, 0.92, 0.85) + vec3(0.08, 0.015, 0.0), flushAmt);
+  float band = exp(-pow(faceV - uTravel, 2.0) / 0.09);
+  float flushAmt = uFlush * smoothstep(0.05, 0.5, face) * (0.6 + 0.4 * band) * mix(1.0, 0.7, uGentle);
+  // Warm rose over the whole face (the plate is otherwise silver-grey, so a hue
+  // shift reads clearly on video), brightest where the wave is.
+  vec3 flushed = image * vec3(1.32, 0.86, 0.78) + vec3(0.13, 0.03, 0.0);
+  image = mix(image, flushed, flushAmt);
 
   // Bare plate (before development): cool silver, tarnish creeping from the edge.
   vec3 bare = mix(vec3(0.80, 0.79, 0.75), vec3(0.52, 0.50, 0.47), smoothstep(0.1, 1.0, e));
