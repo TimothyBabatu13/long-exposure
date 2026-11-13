@@ -28,6 +28,8 @@ The SDK works best on a still, silent, well-lit sitter, so the studio enforces e
 - **A second face** caps the lens at once. If it stays for 2 s, the sitting ends and everything is discarded.
 - **Blinks** leave faint doubled "ghost" eyes, like on real long-exposure plates. This can be turned off.
 - **A smile held for 3 s** is exposed into the plate as a faint layer.
+- **A framing guide** in the side panel shows the outline of your face against a dashed head-and-shoulders target, with one instruction ("Move to your left", "Move a little closer"). It is drawn from the face landmarks only, never from camera pixels, and turns green when you are well placed.
+- **Head style:** on the welcome screen, choose a soft shade (default), dark hair, or a bare head lit like skin.
 - A stage starts only when its signal is actually ready, never on a timer alone. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
 
 When the plate is developed the camera is released. The result screen runs at a lower frame rate, and the heartbeat sound fades out after a few beats (**Mute heartbeat** silences it). You can then:
@@ -77,7 +79,7 @@ npm run dev            # starts the app with hot reload
 | `npm run typecheck` | TypeScript check |
 | `npm run spike` | **Day-1 SDK measurement** (needs a key and a camera, see below) |
 | `npm run smoke` | Unattended synthetic sitting that saves a screenshot of each stage |
-| `npm run render:plate -- <recording.ndjson> [outDir]` | Renders the plate from a recorded sitting in five fixed states plus a contact sheet (PNGs, default `renders/`) |
+| `npm run render:plate -- <recording.ndjson> [outDir]` | Renders the plate from a recorded sitting in fixed states (stages, head styles) plus a contact sheet and the framing guide (PNGs, default `renders/`) |
 | `npm run build:web` | Static web build of the studio in synthetic and replay mode (`dist-web/`) |
 
 ### `npm run spike`: measure the SDK before trusting it
@@ -131,6 +133,7 @@ REC=recordings/my-sitting.ndjson npx vitest run test/replay.test.ts
 - **SDK integration:**
   - The SDK runs in the Electron main process and reads the camera natively ([`src/main/sdk.ts`](src/main/sdk.ts)), the same path as `npm run spike`. Only decoded results cross to the window; frames never do, and the API key never leaves the main process.
   - Why: the SDK's renderer path copies every frame across processes as raw pixels. On a 4-core laptop only 8–18 of the camera's 30 fps got through, and the SDK stopped with `kSustainedLowFrameRate` (code 14). Natively, results arrive at 30/s.
+  - The framing guide ([`src/renderer/ui/framing.ts`](src/renderer/ui/framing.ts)) replaces a camera mirror. Its target was tuned on recorded sittings to agree with the SDK's own framing hints.
   - "Show me the camera" asks for a separate small preview. On Windows the camera usually cannot be shared while the SDK holds it (`NotReadableError`); the mirror then stays off and the sitting continues.
   - The SDK downloads its models at the start of every session, so each sitting needs a working connection.
   - It requests the cardio, breathing and face metric groups.
@@ -204,7 +207,7 @@ src/
     sitting/machine.ts    Stages, lens cap, ledger
     render/               plate.ts (WebGL), landmarks.ts, seal.ts, loop.ts, verso.ts
     harness.ts            Dev render harness used by render:plate
-    ui/                   audio.ts, export.ts
+    ui/                   audio.ts, export.ts, framing.ts
 scripts/spike.mjs         Day-1 SDK measurement
 scripts/smoke.mjs         Unattended synthetic run with screenshots
 scripts/render-plate.mjs  Render a plate from a recording (dev)

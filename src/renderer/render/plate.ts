@@ -4,7 +4,7 @@
 // silver portrait inside a stamped brass oval mat, with grain, tarnish and the
 // per-beat flush. No camera pixels are used anywhere: the portrait is made from
 // face geometry and rhythm only.
-import type { Point, SealParams } from '../../shared/types';
+import type { HeadStyle, Point, SealParams } from '../../shared/types';
 import {
   CONTOURS, FACE_OVAL, RIGHT_EYE, LEFT_EYE, LIPS_INNER, LIPS_OUTER, RIGHT_IRIS, LEFT_IRIS,
   RIGHT_BROW, LEFT_BROW, NOSE_BASE, FOREHEAD, CHIN, NOSE_TIP,
@@ -32,6 +32,8 @@ export interface FrameState {
   capped: boolean;
   gentle: boolean;
   time: number;
+  /** Top of the head; 'soft' when omitted. */
+  head?: HeadStyle;
 }
 
 const VERT = `#version 300 es
@@ -45,7 +47,7 @@ const FRAG = `#version 300 es
 precision highp float;
 in vec2 vUv; out vec4 outColor;
 uniform sampler2D uInk; uniform sampler2D uMask; uniform sampler2D uLight;
-uniform float uFlush, uTravel, uDev, uTime, uCapped, uGentle, uFaceTop, uFaceBottom, uSize;
+uniform float uFlush, uTravel, uDev, uTime, uCapped, uGentle, uFaceTop, uFaceBottom, uSize, uCrownTone;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -83,7 +85,7 @@ void main() {
   float faceTone = 0.28 + 0.6 * lambert - mask.g * 0.32 + lightL.r * 0.14;
   float tone = bg;
   tone = mix(tone, 0.30 + 0.16 * (1.0 - uv.y), coat);
-  tone = mix(tone, 0.20, crown * (1.0 - face));
+  tone = mix(tone, uCrownTone, crown * (1.0 - face));
   tone = mix(tone, faceTone, smoothstep(0.08, 0.6, face));
   tone = clamp(tone, 0.0, 1.0);
 
@@ -106,9 +108,12 @@ void main() {
 
   // The flush: a warm wave travelling forehead to chin with each heartbeat.
   float faceV = clamp((uv.y - uFaceTop) / max(0.01, uFaceBottom - uFaceTop), 0.0, 1.0);
-  float band = exp(-pow(faceV - uTravel, 2.0) / 0.06);
-  float flushAmt = uFlush * smoothstep(0.1, 0.6, face) * (0.45 + 0.55 * band) * mix(1.0, 0.55, uGentle);
-  image = mix(image, image * vec3(1.22, 0.92, 0.85) + vec3(0.08, 0.015, 0.0), flushAmt);
+  float band = exp(-pow(faceV - uTravel, 2.0) / 0.09);
+  float flushAmt = uFlush * smoothstep(0.05, 0.5, face) * (0.6 + 0.4 * band) * mix(1.0, 0.7, uGentle);
+  // Warm rose over the whole face (the plate is otherwise silver-grey, so a hue
+  // shift reads clearly on video), brightest where the wave is.
+  vec3 flushed = image * vec3(1.32, 0.86, 0.78) + vec3(0.13, 0.03, 0.0);
+  image = mix(image, flushed, flushAmt);
 
   // Bare plate (before development): cool silver, tarnish creeping from the edge.
   vec3 bare = mix(vec3(0.80, 0.79, 0.75), vec3(0.52, 0.50, 0.47), smoothstep(0.1, 1.0, e));
@@ -167,7 +172,7 @@ export class PlateRenderer {
     const loc = gl.getAttribLocation(this.prog, 'aPos');
     gl.enableVertexAttribArray(loc);
     gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    for (const n of ['uInk', 'uMask', 'uLight', 'uFlush', 'uTravel', 'uDev', 'uTime', 'uCapped', 'uGentle', 'uFaceTop', 'uFaceBottom', 'uSize']) {
+    for (const n of ['uInk', 'uMask', 'uLight', 'uFlush', 'uTravel', 'uDev', 'uTime', 'uCapped', 'uGentle', 'uFaceTop', 'uFaceBottom', 'uSize', 'uCrownTone']) {
       this.u[n] = gl.getUniformLocation(this.prog, n);
     }
     this.inkCanvas = document.createElement('canvas');
@@ -197,7 +202,7 @@ export class PlateRenderer {
       const P = (i: number) => this.place(f.face![i], f.breath);
       faceTop = P(FOREHEAD).y / s; faceBottom = P(CHIN).y / s;
       this.drawBust(mask, f);
-      if (f.topologyOk) this.drawCrown(light, f, P);
+      if (f.topologyOk) this.drawCrown(f.head === 'bare' ? mask : light, f, P);
 
       // Height: the face oval, heavily blurred, reads as a dome to the shader.
       mask.filter = `blur(${Math.round(s * 0.028)}px)`;
@@ -262,6 +267,7 @@ export class PlateRenderer {
     gl.uniform1f(this.u.uFaceTop, faceTop);
     gl.uniform1f(this.u.uFaceBottom, faceBottom);
     gl.uniform1f(this.u.uSize, s);
+    gl.uniform1f(this.u.uCrownTone, f.head === 'dark' ? 0.20 : 0.42);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -298,15 +304,21 @@ export class PlateRenderer {
     light.filter = 'none';
   }
 
-  /** A soft dark crown above the brow so the head does not end at the hairline. */
-  private drawCrown(light: CanvasRenderingContext2D, f: FrameState, P: (i: number) => Point): void {
-    const s = this.size;
+  /**
+   * The top of the head above the brow, so the head does not end at the hairline.
+   * Hair ('soft', 'dark') is a shaded crown on the light layer; a bare head is a
+   * lower dome on the height layer, so the shader lights it like the face.
+   */
+  private drawCrown(layer: CanvasRenderingContext2D, f: FrameState, P: (i: number) => Point): void {
+    const s = this.size, bare = f.head === 'bare';
     const top = P(FOREHEAD), l = P(234), r = P(454), chin = P(CHIN);
     const w = Math.abs(r.x - l.x), h = Math.abs(chin.y - top.y);
-    light.filter = `blur(${Math.round(s * 0.045)}px)`;
-    light.fillStyle = 'rgb(0,130,0)';
+    const light = layer;
+    light.filter = `blur(${Math.round(s * (bare ? 0.03 : 0.045))}px)`;
+    light.fillStyle = bare ? 'rgb(200,0,0)' : 'rgb(0,130,0)';
     light.beginPath();
-    light.ellipse((l.x + r.x) / 2, top.y + h * 0.12, w * 0.58, h * 0.42, 0, Math.PI, Math.PI * 2);
+    if (bare) light.ellipse((l.x + r.x) / 2, top.y + h * 0.18, w * 0.47, h * 0.40, 0, Math.PI, Math.PI * 2);
+    else light.ellipse((l.x + r.x) / 2, top.y + h * 0.12, w * 0.58, h * 0.42, 0, Math.PI, Math.PI * 2);
     light.fill();
     light.filter = 'none';
   }

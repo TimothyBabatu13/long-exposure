@@ -32,6 +32,7 @@
         <label><input type="checkbox" id="opt-ghosts" checked /> Blink ghosts</label>
         <label><input type="checkbox" id="opt-gentle" /> Gentle mode (no shimmer)</label>
         <label><input type="checkbox" id="opt-mirror" /> Show me the camera</label>
+        <label>Head <select id="opt-head"><option value="soft" selected>Soft shade</option><option value="dark">Dark hair</option><option value="bare">Bare or close-cropped</option></select></label>
         <label class="name">Name on the plate <input type="text" id="opt-name" maxlength="40" placeholder="Sitter" /></label>
       </div>
 
@@ -55,6 +56,10 @@
     </div>
     <aside class="ledger" aria-label="Studio ledger">
       <div class="lens"><span id="lens-dot"></span><span id="lens-text">Lens closed</span></div>
+      <figure class="guide" aria-label="Framing guide: your face outline against the target">
+        <canvas id="guide" width="288" height="162"></canvas>
+        <figcaption><strong>Framing</strong> <span id="guide-advice" aria-live="polite"></span></figcaption>
+      </figure>
       <h3>Studio Ledger</h3>
       <dl class="net">
         <dt>Camera frames saved</dt><dd>0</dd>
