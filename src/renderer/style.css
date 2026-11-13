@@ -82,6 +82,12 @@ small { color: var(--muted); font-size: 12px; }
 .net dd { margin: 0; text-align: right; }
 .log { list-style: none; padding: 0; margin: 0; font: 12px/1.6 var(--mono); color: #cdbfa3; flex: 1; min-height: 120px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 8px; }
 .log li b { color: var(--accent); font-weight: 400; margin-right: 6px; }
+.guide { margin: 12px 0; }
+.guide canvas { display: block; width: 100%; height: auto; background: rgba(0,0,0,.25); border-radius: 4px; }
+.guide figcaption { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.guide figcaption strong { color: var(--ink); font-weight: normal; margin-right: 6px; }
+#guide-advice[data-state="ok"] { color: rgb(160,200,140); }
+#guide-advice[data-state="off"] { color: rgb(230,170,90); }
 #mirror { width: 100%; border-radius: 4px; transform: scaleX(-1); opacity: .9; }
 
 .flip { position: relative; width: min(70vh, 100%); aspect-ratio: 1; perspective: 1600px; }

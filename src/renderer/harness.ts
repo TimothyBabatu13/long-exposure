@@ -4,6 +4,7 @@
 import type { Point } from '../shared/types';
 import { PlateRenderer, type FrameState } from './render/plate';
 import { sealFrom } from './render/seal';
+import { drawGuide, frameFor, placement } from './ui/framing';
 
 interface HarnessState { name: string; frame: Partial<FrameState> }
 
@@ -18,7 +19,10 @@ const STATES: HarnessState[] = [
 ];
 
 declare global {
-  interface Window { __harness(face: Point[], size: number): Promise<{ name: string; png: string }[]> }
+  interface Window {
+    __harness(face: Point[], size: number): Promise<{ name: string; png: string }[]>;
+    __guide(raw: Point[]): { name: string; png: string }[];
+  }
 }
 
 window.__harness = async (face, size) => {
@@ -45,4 +49,26 @@ window.__harness = async (face, size) => {
   out.push({ name: '0-sheet', png: sheet.toDataURL('image/png') });
   r.dispose();
   return out;
+};
+
+// The framing guide for one recorded face: as recorded, shifted off-centre, and too far away.
+window.__guide = (raw) => {
+  const fr = frameFor(1280, 720);
+  const cx = raw.reduce((a, p) => a + p.x, 0) / raw.length, cy = raw.reduce((a, p) => a + p.y, 0) / raw.length;
+  const variants: [string, Point[]][] = [
+    ['guide-1-as-recorded', raw],
+    ['guide-2-off-left', raw.map((p) => ({ x: p.x + 260, y: p.y }))],
+    ['guide-3-too-far', raw.map((p) => ({ x: cx + (p.x - cx) * 0.5, y: cy + (p.y - cy) * 0.5 }))],
+  ];
+  return variants.map(([name, pts]) => {
+    const c = document.createElement('canvas'); c.width = 576; c.height = 324;
+    const ctx = c.getContext('2d')!;
+    const pl = placement(pts, fr);
+    drawGuide(ctx, pts, fr, pl);
+    ctx.fillStyle = '#d9cbb0'; ctx.font = '16px Georgia, serif';
+    ctx.fillText(pl?.ok ? 'Well placed' : pl?.advice ?? '', 10, c.height - 10);
+    const out = document.createElement('canvas'); out.width = c.width; out.height = c.height;
+    const o = out.getContext('2d')!; o.fillStyle = '#1a1714'; o.fillRect(0, 0, c.width, c.height); o.drawImage(c, 0, 0);
+    return { name, png: out.toDataURL('image/png') };
+  });
 };

@@ -11,6 +11,7 @@ import { beatsForLoop, plateFrameAt } from './render/loop';
 import { drawVerso } from './render/verso';
 import { Heartbeat } from './ui/audio';
 import { canvasPng, parsePlate, plateGif, plateJson } from './ui/export';
+import { drawGuide, frameFor, placement } from './ui/framing';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const isWeb = typeof __WEB_BUILD__ !== 'undefined' && __WEB_BUILD__;
@@ -120,6 +121,10 @@ let face: Point[] | null = null;
 let faceSum: Point[] | null = null;
 let faceN = 0;
 let topologyOk = false;
+/** Latest raw landmarks (camera pixels) for the framing guide, and how far they have reached. */
+let rawFace: Point[] | null = null;
+let rawAt = 0;
+let reachX = 0, reachY = 0;
 let ghosts: Point[][] = [];
 let smileSince: number | null = null;
 let smile: Point[] | null = null;
@@ -137,6 +142,7 @@ function resetSitting(): void {
   lastRecording = null;
   sitting = null; running = false; readiness = 'no-face'; readinessHint = ''; talking = false; blinking = false;
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
+  rawFace = null; rawAt = 0; reachX = 0; reachY = 0;
   ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity;
   plate = null; pair = null; replayText = null;
   $('ledger-log').replaceChildren();
@@ -247,6 +253,8 @@ function onSource(e: SourceEvent): void {
   if (p.landmarks) {
     topologyOk = topologyLooksRight(p.landmarks.points);
     face = smoothToward(face, normalise(p.landmarks.points), 0.35);
+    rawFace = p.landmarks.points; rawAt = Date.now() / 1000;
+    for (const q of rawFace) { if (q.x > reachX) reachX = q.x; if (q.y > reachY) reachY = q.y; }
   }
   const wall = Date.now() / 1000;
   if (p.blinking?.length) {
@@ -341,6 +349,8 @@ function frame(dt: number): void {
   // For framing problems the SDK's own hint ("chest not visible", "face too low"…) is more useful than ours.
   $('caption').textContent = sitting.pause === 'framing' && readinessHint ? readinessHint
     : sitting.pause ? pauseCopy[sitting.pause] : stageCopy[stage];
+
+  updateGuide(wall);
 
   if (opts.mirror && source?.preview) {
     const v = $<HTMLVideoElement>('mirror');
@@ -534,6 +544,21 @@ async function save(name: string, data: Promise<Uint8Array | string>, label: str
 
 function slug(): string {
   return `long-exposure-${opts.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}`;
+}
+
+/** The framing guide in the ledger: face outline against the target, plus one instruction. */
+function updateGuide(wall: number): void {
+  const canvas = $<HTMLCanvasElement>('guide');
+  const fresh = rawFace && wall - rawAt < 1.5 ? rawFace : null;
+  const fr = fresh ? frameFor(reachX, reachY) : null;
+  if (fr) {
+    const h = Math.round((canvas.width * fr.h) / fr.w);
+    if (canvas.height !== h) canvas.height = h;
+  }
+  const pl = fresh && fr ? placement(fresh, fr) : null;
+  drawGuide(canvas.getContext('2d')!, fresh, fr, pl);
+  $('guide-advice').textContent = !fresh ? 'No face found yet' : pl?.ok ? 'Well placed' : pl?.advice ?? '';
+  $('guide-advice').dataset.state = !fresh ? 'none' : pl?.ok ? 'ok' : 'off';
 }
 
 async function stopSource(): Promise<void> {
