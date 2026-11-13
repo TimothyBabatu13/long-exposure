@@ -1,6 +1,6 @@
 // The studio: wires signal sources, the sitting, the renderer and the UI.
 import type { Plate, Point, Readiness, SourceEvent, LedgerEntry, BeatTier, HeadStyle } from '../shared/types';
-import { BeatTracker } from './signal/beats';
+import { BeatTracker, flushEnvelope } from './signal/beats';
 import { BreathTracker } from './signal/breath';
 import { LiveSource, ReplaySource, SyntheticSource, type SignalSource } from './signal/sources';
 import { Sitting, pauseCopy, type Stage } from './sitting/machine';
@@ -145,7 +145,7 @@ function resetSitting(): void {
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
   rawFace = null; rawAt = 0; reachX = 0; reachY = 0;
   pulseScale.reset(); breathScale.reset();
-  ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity;
+  ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity; tierSeen = 'rate';
   plate = null; pair = null; replayText = null;
   $('ledger-log').replaceChildren();
   $('flip').classList.remove('turned');
@@ -332,7 +332,7 @@ function frame(dt: number): void {
       tierSeen = ph.tier;
       if (ph.sinceBeat < lastSince) heart.beat(0);
       lastSince = ph.sinceBeat;
-      flush = ph.sinceBeat < 0.08 ? ph.sinceBeat / 0.08 : Math.exp(-(ph.sinceBeat - 0.08) / (Math.max(0.25, ph.period * 0.55) / 3));
+      flush = flushEnvelope(ph.sinceBeat, ph.period);
       travel = Math.min(1, ph.sinceBeat / 0.45);
     }
   }

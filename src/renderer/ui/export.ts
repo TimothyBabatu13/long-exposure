@@ -1,7 +1,7 @@
 // Exports. Nothing is written to disk except through these functions, and
 // each one goes through a save dialog the sitter controls.
 import { GIFEncoder, quantize, applyPalette } from 'gifenc';
-import type { Plate } from '../../shared/types';
+import type { Plate, Point } from '../../shared/types';
 import { PlateRenderer } from '../render/plate';
 import { loopLength, plateFrameAt } from '../render/loop';
 
@@ -40,8 +40,32 @@ export function plateJson(plate: Plate): string {
   }, null, 1);
 }
 
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isPoint = (q: unknown) => !!q && isNum((q as Point).x) && isNum((q as Point).y);
+const numsOrNull = (v: unknown) => v == null || isNum(v);
+
+/**
+ * Reads someone else's plate file. Everything it draws or prints is checked,
+ * so a damaged or hand-made file is refused rather than half-rendered.
+ */
 export function parsePlate(text: string): Plate {
-  const p = JSON.parse(text);
-  if (p?.format !== 'long-exposure/plate@1' || !Array.isArray(p.face)) throw new Error('Not a Long Exposure plate file');
-  return p as Plate;
+  const bad = (why: string): never => { throw new Error(`Not a usable Long Exposure plate (${why})`); };
+  let p: Plate;
+  try { p = JSON.parse(text); } catch { return bad('not JSON'); }
+  if (p?.format !== 'long-exposure/plate@1') bad('unknown format');
+  if (!Array.isArray(p.face) || p.face.length < 3 || p.face.length > 1000 || !p.face.every(isPoint)) bad('face');
+  if (!Array.isArray(p.beats) || p.beats.length > 200 || !p.beats.every(isNum)) bad('beats');
+  if (!isNum(p.breathPeriod) || p.breathPeriod <= 0 || p.breathPeriod > 20) bad('breath period');
+  if (p.breathCurve != null && (!Array.isArray(p.breathCurve) || p.breathCurve.length > 1000 || !p.breathCurve.every(isNum))) bad('breath curve');
+  if (!Array.isArray(p.ghosts) || !p.ghosts.every((g) => Array.isArray(g) && g.every(isPoint))) bad('ghosts');
+  if (p.smile != null && (!Array.isArray(p.smile) || !p.smile.every(isPoint))) bad('smile');
+  if (typeof p.sitterLabel !== 'string' || p.sitterLabel.length > 80) bad('name');
+  if (p.seal != null) {
+    const sp = p.seal as unknown as Record<string, unknown>;
+    if (!Object.values(sp).every(isNum) || !isNum(sp.lobes) || sp.lobes > 64 || !isNum(sp.rings) || sp.rings > 64) bad('seal');
+  }
+  const v = p.verso;
+  if (!v || ![v.pulseBpm, v.breathRpm, v.rmssd, v.sdnn, v.pulseConfidence].every(numsOrNull)) bad('readouts');
+  if (!Array.isArray(v.traceExcerpt) || !v.traceExcerpt.every(isNum) || !Array.isArray(v.ledger)) bad('verso');
+  return p;
 }
