@@ -166,7 +166,13 @@ if (process.env.LE_HARNESS) {
     // Average the normalised face over the sitting, as the app does for the plate.
     let sum: { x: number; y: number }[] | null = null, n = 0, talking = false;
     let raw: { x: number; y: number }[] | null = null; // one mid-sitting face, camera pixels, for the guide
+    const pulse: { t: number; v: number }[] = [], breathS: { t: number; v: number }[] = [];
     for (const line of read(rec, 'utf8').split('\n')) {
+      if (line.includes('"pulseTrace"') || line.includes('"breathTrace"')) {
+        const pk = JSON.parse(line).e?.packet;
+        for (const s of pk?.pulseTrace ?? []) if (!pulse.length || s.t > pulse[pulse.length - 1].t) pulse.push(s);
+        for (const s of pk?.breathTrace ?? []) if (!breathS.length || s.t > breathS[breathS.length - 1].t) breathS.push(s);
+      }
       if (line.includes('"talking"')) { const t = JSON.parse(line).e?.packet?.talking; if (t?.length) talking = !!t[t.length - 1].detected; }
       if (!line.includes('"landmarks"') || talking) continue;
       const pts = JSON.parse(line).e?.packet?.landmarks?.points as { x: number; y: number }[] | undefined;
@@ -182,6 +188,7 @@ if (process.env.LE_HARNESS) {
     if (devUrl) await win.loadURL(`${devUrl}/harness.html`);
     else await win.loadFile(join(import.meta.dirname, '../renderer/harness.html'));
     const shots = await win.webContents.executeJavaScript(`window.__harness(${JSON.stringify(face)}, 720)`) as { name: string; png: string }[];
+    if (pulse.length) shots.push(...await win.webContents.executeJavaScript(`window.__kymo(${JSON.stringify(pulse)}, ${JSON.stringify(breathS)})`) as { name: string; png: string }[]);
     if (raw) shots.push(...await win.webContents.executeJavaScript(`window.__guide(${JSON.stringify(raw)})`) as { name: string; png: string }[]);
     mkdirSync(outDir, { recursive: true });
     for (const s of shots) writeFileSync(join(outDir, `${s.name}.png`), Buffer.from(s.png.split(',')[1], 'base64'));

@@ -28,6 +28,7 @@ The SDK works best on a still, silent, well-lit sitter, so the studio enforces e
 - **A second face** caps the lens at once. If it stays for 2 s, the sitting ends and everything is discarded.
 - **Blinks** leave faint doubled "ghost" eyes, like on real long-exposure plates. This can be turned off.
 - **A smile held for 3 s** is exposed into the plate as a faint layer.
+- **Live traces** under the plate, drawn like a 19th-century kymograph (a needle scratching through soot on a turning drum): your real pulse waveform and chest trace from the SDK, scrolling as they arrive. Each lane rests flat until its signal has locked, and a held breath stays flat rather than being magnified. No numbers on the front.
 - **A framing guide** in the side panel shows the outline of your face against a dashed head-and-shoulders target, with one instruction ("Move to your left", "Move a little closer"). It is drawn from the face landmarks only, never from camera pixels, and turns green when you are well placed.
 - **Head style:** on the welcome screen, choose a soft shade (default), dark hair, or a bare head lit like skin.
 - A stage starts only when its signal is actually ready, never on a timer alone. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
@@ -207,7 +208,7 @@ src/
     sitting/machine.ts    Stages, lens cap, ledger
     render/               plate.ts (WebGL), landmarks.ts, seal.ts, loop.ts, verso.ts
     harness.ts            Dev render harness used by render:plate
-    ui/                   audio.ts, export.ts, framing.ts
+    ui/                   audio.ts, export.ts, framing.ts, kymograph.ts
 scripts/spike.mjs         Day-1 SDK measurement
 scripts/smoke.mjs         Unattended synthetic run with screenshots
 scripts/render-plate.mjs  Render a plate from a recording (dev)

@@ -5,6 +5,8 @@ import type { Point } from '../shared/types';
 import { PlateRenderer, type FrameState } from './render/plate';
 import { sealFrom } from './render/seal';
 import { drawGuide, frameFor, placement } from './ui/framing';
+import { drawKymograph, WINDOW_S } from './ui/kymograph';
+import type { Sample } from '../shared/types';
 
 interface HarnessState { name: string; frame: Partial<FrameState> }
 
@@ -22,6 +24,7 @@ declare global {
   interface Window {
     __harness(face: Point[], size: number): Promise<{ name: string; png: string }[]>;
     __guide(raw: Point[]): { name: string; png: string }[];
+    __kymo(pulse: Sample[], breath: Sample[]): { name: string; png: string }[];
   }
 }
 
@@ -70,5 +73,23 @@ window.__guide = (raw) => {
     const out = document.createElement('canvas'); out.width = c.width; out.height = c.height;
     const o = out.getContext('2d')!; o.fillStyle = '#1a1714'; o.fillRect(0, 0, c.width, c.height); o.drawImage(c, 0, 0);
     return { name, png: out.toDataURL('image/png') };
+  });
+};
+
+// The live trace strip at three moments of a recorded sitting.
+window.__kymo = (pulse, breath) => {
+  const end = Math.max(pulse.at(-1)?.t ?? 0, breath.at(-1)?.t ?? 0);
+  const start = Math.min(pulse[0]?.t ?? end, breath[0]?.t ?? end);
+  const at = (f: number) => start + f * (end - start);
+  const states: [string, number, boolean, boolean][] = [
+    ['kymo-1-focusing', at(0.15), false, false],
+    ['kymo-2-heart', at(0.35), true, false],
+    ['kymo-3-breath', at(0.7), true, true],
+  ];
+  return states.map(([name, t, pulseOn, breathOn]) => {
+    const c = document.createElement('canvas'); c.width = 720; c.height = 150;
+    const win = (s: Sample[]) => s.filter((q) => q.t <= t && q.t > t - WINDOW_S * 2);
+    drawKymograph(c.getContext('2d')!, { pulse: win(pulse), breath: win(breath), pulseOn, breathOn, capped: false });
+    return { name, png: c.toDataURL('image/png') };
   });
 };
