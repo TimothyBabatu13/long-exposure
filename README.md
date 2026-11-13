@@ -16,19 +16,21 @@ The SDK needs time before each signal is reliable: about 12 s for pulse, 30 s fo
 |---|---|---|---|
 | 0–12 s | **Focusing** | 478 face landmarks, blinks | A ghost of your face emerges as engraving lines on a silver plate |
 | 12–30 s | **Exposing the heart** | Pulse waveform and pulse rate | Each heartbeat sends a warm flush from forehead to chin, with a soft heartbeat sound |
-| 30–60 s | **Exposing the breath** | Breathing rate and chest trace | The bust rises and falls with your breathing |
-| 60 s+ | **Fixing** | HRV (RMSSD, SDNN) | A guilloché seal, unique to this sitting, is engraved in the corner |
+| 30–60 s | **Exposing the breath** | Breathing rate and chest trace | The bust rises and falls with your real chest trace, and is still when you hold your breath |
+| 60 s+ | **Fixing** | HRV (RMSSD, SDNN), or a locked pulse | A guilloché seal, unique to this sitting, is engraved in the corner |
+
+Fixing starts at 60 s once HRV has arrived, or once the pulse is locked. When the SDK has not delivered HRV yet, the seal is drawn from the variation between the beats the studio detected itself.
 
 The SDK works best on a still, silent, well-lit sitter, so the studio enforces exactly that:
 
-- **Talking caps the lens.** Speech spoils the breathing signal, so the exposure clock stops while you speak.
-- **Movement, leaving the frame, poor light or switching windows** also cap the lens.
-- **A second face** ends the sitting and discards everything.
+- **Talking caps the lens.** Speech spoils the breathing signal, so after 1.5 s of talking the exposure clock stops and the breathing trace holds still.
+- **Movement, leaving the frame, poor light or switching windows** also cap the lens. Short detector flickers are ignored: a cap needs 0.5 s of the same problem, and lifts after 0.3 s of a clean signal. The caption says what to fix.
+- **A second face** caps the lens at once. If it stays for 2 s, the sitting ends and everything is discarded.
 - **Blinks** leave faint doubled "ghost" eyes, like on real long-exposure plates. This can be turned off.
 - **A smile held for 3 s** is exposed into the plate as a faint layer.
-- A stage starts only when its signal is actually ready, never on a timer alone. If the signal never settles, the plate develops as **underexposed** and says so.
+- A stage starts only when its signal is actually ready, never on a timer alone. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
 
-When the plate is developed the camera is released. You can then:
+When the plate is developed the camera is released. The result screen runs at a lower frame rate, and the heartbeat sound fades out after a few beats (**Mute heartbeat** silences it). You can then:
 
 - **Turn the plate over.** The **verso** (back) shows the evidence: raw readouts, a stretch of your actual pulse waveform, which beat-timing method was used, and a timestamped log of everything that happened. The front never shows numbers.
 - **Save a GIF loop** (one breath long, with your own beat timings), PNGs of the front and back, or a `.plate.json` file.
@@ -75,6 +77,7 @@ npm run dev            # starts the app with hot reload
 | `npm run typecheck` | TypeScript check |
 | `npm run spike` | **Day-1 SDK measurement** (needs a key and a camera, see below) |
 | `npm run smoke` | Unattended synthetic sitting that saves a screenshot of each stage |
+| `npm run render:plate -- <recording.ndjson> [outDir]` | Renders the plate from a recorded sitting in five fixed states plus a contact sheet (PNGs, default `renders/`) |
 | `npm run build:web` | Static web build of the studio in synthetic and replay mode (`dist-web/`) |
 
 ### `npm run spike`: measure the SDK before trusting it
@@ -98,6 +101,12 @@ With `--out` it writes the decoded metrics as NDJSON, with no frames.
 
 Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save session recording** button. It saves every received signal (no frames) as `.ndjson`. **Play a recorded sitting** on the welcome screen plays it back, labelled **REPLAY**. This lets judges without a key, or the web build, see a real sitting.
 
+A recording can also be replayed through the sitting logic in a test, which prints the stage ledger, the breathing motion and the result:
+
+```bash
+REC=recordings/my-sitting.ndjson npx vitest run test/replay.test.ts
+```
+
 ---
 
 ## How it works
@@ -110,7 +119,7 @@ Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save sessi
  │ permission handler: camera    │             │ BeatTracker  (waveform → beats)           │
  │   only, own page only         │             │ BreathTracker (chest trace / rate)        │
  │ webRequest: block + log all   │──ledger───► │ Sitting      (stages, lens cap, ledger)   │
- │   non-local requests          │             │ PlateRenderer (Canvas2D ink + WebGL plate)│
+ │   non-local requests          │             │ PlateRenderer (Canvas2D layers + WebGL)   │
  │ save dialog (the only writes) │◄─export──── │ Heartbeat (Web Audio), GIF/PNG export     │
  └───────────────────────────────┘             └───────────────────────────────────────────┘
 ```
@@ -122,7 +131,8 @@ Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save sessi
 - **SDK integration:**
   - The SDK runs in the Electron main process and reads the camera natively ([`src/main/sdk.ts`](src/main/sdk.ts)), the same path as `npm run spike`. Only decoded results cross to the window; frames never do, and the API key never leaves the main process.
   - Why: the SDK's renderer path copies every frame across processes as raw pixels. On a 4-core laptop only 8–18 of the camera's 30 fps got through, and the SDK stopped with `kSustainedLowFrameRate` (code 14). Natively, results arrive at 30/s.
-  - "Show me the camera" opens a separate small preview. Windows may refuse to share the camera (`NotReadableError`); the mirror then stays off and the sitting continues.
+  - "Show me the camera" asks for a separate small preview. On Windows the camera usually cannot be shared while the SDK holds it (`NotReadableError`); the mirror then stays off and the sitting continues.
+  - The SDK downloads its models at the start of every session, so each sitting needs a working connection.
   - It requests the cardio, breathing and face metric groups.
   - Decoding uses `@smartspectra/node-sdk/messages`. See [`src/renderer/signal/metrics.ts`](src/renderer/signal/metrics.ts).
 
@@ -140,15 +150,16 @@ The verso always prints which tier was used. The exported loop replays the sitte
 
 ### The portrait
 
-[`PlateRenderer`](src/renderer/render/plate.ts) draws two layers with Canvas 2D:
+[`PlateRenderer`](src/renderer/render/plate.ts) draws three layers with Canvas 2D from the face averaged over the sitting:
 
-- **Ink:** engraved contours of the face, eyes, brows, lips and nose, plus a stipple of all 478 points and the blink ghosts.
-- **Mask:** a soft fill of the face and features.
+- **Mask:** a height field of the head, the shadows, and the coat.
+- **Light:** highlights and the crown of the head.
+- **Ink:** engraved contours of the eyes, brows, lips and nose, irises with a catchlight, and the blink ghosts.
 
-One fragment shader combines them into:
+One fragment shader combines them into a daguerreotype:
 
-- a silver plate with tarnish, an iridescent edge, grain and vignette;
-- engraving hatch lines that bend around the face;
+- a silver plate behind a brass oval mat, with tarnish, grain and vignette;
+- the face lit from the slope of the height field and engraved with lines and crosshatch, against a smooth backdrop;
 - the travelling flush on each beat;
 - grain-first development;
 - the lens cap.
@@ -184,6 +195,7 @@ The full statement is in **[docs/PRIVACY.md](docs/PRIVACY.md)**. In short:
 ```
 src/
   main/index.ts           Electron main: window, permissions, network ledger, save dialogs
+  main/sdk.ts             SmartSpectra SDK on the native camera; forwards results to the window
   preload/index.ts        SDK bridge plus window.studio (bundled to CJS for the sandbox)
   shared/types.ts         Signal, plate and bridge types
   renderer/
@@ -191,21 +203,22 @@ src/
     signal/               metrics.ts (SDK → packet), beats.ts, breath.ts, sources.ts, synthetic.ts
     sitting/machine.ts    Stages, lens cap, ledger
     render/               plate.ts (WebGL), landmarks.ts, seal.ts, loop.ts, verso.ts
+    harness.ts            Dev render harness used by render:plate
     ui/                   audio.ts, export.ts
 scripts/spike.mjs         Day-1 SDK measurement
 scripts/smoke.mjs         Unattended synthetic run with screenshots
+scripts/render-plate.mjs  Render a plate from a recording (dev)
 test/                     Vitest unit tests
 docs/                     PRIVACY.md, DEMO.md
 ```
 
 ## Status
 
-The app is working in synthetic mode: all stages, the lens cap, blink ghosts, the seal, the verso, and GIF, PNG and plate export. Unit tests pass.
+Live sittings with the SDK on a real camera (Windows, 4-core laptop) complete end to end: all stages, the lens cap, the seal, the verso, and GIF, PNG and plate export. Unit tests pass.
 
-**Not yet verified against the live SDK on a real camera.** Run `npm run spike` first, then update this section with what it reports:
-
-- [ ] Waveform lag and the resulting beat tier
-- [ ] The landmark topology matches the 478-point face mesh
+- [x] The native camera path holds the frame rate (no more code 14)
+- [x] The landmark topology matches the 478-point face mesh
+- [ ] Waveform lag and the resulting beat tier, recorded here
 - [ ] Network audit of SDK traffic (docs/PRIVACY.md)
 - [ ] Tested in poor light, with glasses, and across skin tones (camera pulse readings are weaker on darker skin and in low light)
 
