@@ -39,6 +39,12 @@ export const SECOND_FACE_ABANDON_S = 2;
 export const CAP_DELAY_S = 0.5;
 /** ...and be gone this long before it uncaps. */
 export const UNCAP_DELAY_S = 0.3;
+/**
+ * Talking must last this long before the lens caps. The SDK's talking flag
+ * reads the lips, not sound, and flickers: in the 2026-11-12 sittings half of
+ * all flagged spells were under 0.3 s. A spoken word or sentence lasts longer.
+ */
+export const TALK_CAP_DELAY_S = 1.5;
 /** Pauses that cap at once: privacy (window left, second face) and start-up. */
 const IMMEDIATE_PAUSES: ReadonlySet<PauseReason> = new Set(['away', 'crowd', 'starting']);
 
@@ -102,7 +108,7 @@ export class Sitting {
     } else {
       if (raw === this.pending) this.pendingFor += dt;
       else { this.pending = raw; this.pendingFor = dt; }
-      const need = raw == null ? UNCAP_DELAY_S : IMMEDIATE_PAUSES.has(raw) ? 0 : CAP_DELAY_S;
+      const need = raw == null ? UNCAP_DELAY_S : IMMEDIATE_PAUSES.has(raw) ? 0 : raw === 'talking' ? TALK_CAP_DELAY_S : CAP_DELAY_S;
       if (this.pendingFor >= need) {
         if (raw && raw !== 'starting') this.log(raw === 'talking' ? 'talk' : raw === 'motion' ? 'motion' : 'face', pauseText[raw]);
         else if (!raw && this.pause && this.pause !== 'starting') this.log('stage', 'still again: lens uncapped');

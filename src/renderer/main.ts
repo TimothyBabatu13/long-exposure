@@ -240,7 +240,7 @@ function onSource(e: SourceEvent): void {
   if (p.hrv) hrv = { rmssd: p.hrv.rmssd, sdnn: p.hrv.sdnn, ready: p.hrv.stable };
   if (p.talking?.length) {
     talking = p.talking[p.talking.length - 1].detected;
-    breath.hold(talking);
+
   }
   if (p.landmarks) {
     topologyOk = topologyLooksRight(p.landmarks.points);
@@ -286,6 +286,9 @@ function frame(dt: number): void {
     breathReady: !!breathRate?.ready,
     hrvReady: !!hrv?.ready,
   });
+
+  // Freeze the breath only for sustained talking (the lens is capped for it), not for flicker.
+  breath.hold(sitting.pause === 'talking');
 
   if (stage === 'abandoned') {
     void stopSource();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, type SittingInputs } from '../src/renderer/sitting/machine';
+import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, TALK_CAP_DELAY_S, type SittingInputs } from '../src/renderer/sitting/machine';
 
 const still: SittingInputs = {
   readiness: 'ok', talking: false, windowFocused: true, running: true,
@@ -28,7 +28,7 @@ describe('Sitting', () => {
     expect(s.pause).toBe('talking');
     // The clock runs only for the cap delay, then stops.
     expect(s.exposure).toBeGreaterThan(before);
-    expect(s.exposure).toBeLessThanOrEqual(before + CAP_DELAY_S + 1e-9);
+    expect(s.exposure).toBeLessThanOrEqual(before + TALK_CAP_DELAY_S + 1e-9);
     run(s, 1);
     expect(s.pause).toBeNull();
     expect(s.ledger.some((e) => e.text.includes('speech'))).toBe(true);
@@ -105,5 +105,26 @@ describe('Sitting', () => {
     expect(s.underexposedReason).toBe('the pulse was lost before the plate could be fixed');
     expect(s.ledger.some((e) => e.text.includes('light'))).toBe(false);
     expect(s.stage).toBe('developed');
+  });
+});
+
+describe('Sitting: talking', () => {
+  it('does not cap for a short lip movement under the talk delay', () => {
+    const s = new Sitting();
+    run(s, 5);
+    run(s, TALK_CAP_DELAY_S - 0.3, { talking: true });
+    expect(s.pause).toBeNull();
+    expect(s.ledger.some((e) => e.text.includes('speech'))).toBe(false);
+  });
+
+  it('still caps for sustained talking, and other problems keep the short delay', () => {
+    const s = new Sitting();
+    run(s, 5);
+    run(s, TALK_CAP_DELAY_S + 0.3, { talking: true });
+    expect(s.pause).toBe('talking');
+    const t = new Sitting();
+    run(t, 5);
+    run(t, CAP_DELAY_S + 0.2, { readiness: 'motion' });
+    expect(t.pause).toBe('motion');
   });
 });
