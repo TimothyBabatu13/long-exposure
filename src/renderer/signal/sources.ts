@@ -75,15 +75,8 @@ export class LiveSource implements SignalSource {
       sdk.onMetrics((buf) => {
         packets++;
         const packet = metricsToPacket(decodeMetrics(buf), now());
-        if (packet.hrv && !sawHrv) { sawHrv = true; console.log('[studio] HRV received (live results)'); }
+        if (packet.hrv && !sawHrv) { sawHrv = true; console.log('[studio] HRV received'); }
         this.emit({ type: 'packet', packet });
-      }),
-      // Accumulated results repeat earlier traces, so only HRV is taken from them.
-      sdk.onAccumulated((buf) => {
-        const p = metricsToPacket(decodeMetrics(buf), now());
-        if (!p.hrv) return;
-        if (!sawHrv) { sawHrv = true; console.log('[studio] HRV received (accumulated results)'); }
-        this.emit({ type: 'packet', packet: { arrival: p.arrival, hrv: p.hrv } });
       }),
       sdk.onValidation((code, hint) => {
         if (code !== lastCode) { lastCode = code; console.log(`[studio] readiness code ${code}${hint ? `: ${hint}` : ''}`); }

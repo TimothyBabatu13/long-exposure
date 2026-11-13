@@ -1,13 +1,13 @@
 // The studio: wires signal sources, the sitting, the renderer and the UI.
 import type { Plate, Point, Readiness, SourceEvent, LedgerEntry, BeatTier, HeadStyle } from '../shared/types';
-import { BeatTracker } from './signal/beats';
+import { BeatTracker, flushEnvelope } from './signal/beats';
 import { BreathTracker } from './signal/breath';
 import { LiveSource, ReplaySource, SyntheticSource, type SignalSource } from './signal/sources';
 import { Sitting, pauseCopy, type Stage } from './sitting/machine';
 import { PlateRenderer, type FrameState } from './render/plate';
 import { LEFT_EYE, LIPS_OUTER, RIGHT_EYE, normalise, smoothToward, topologyLooksRight } from './render/landmarks';
 import { sealFrom } from './render/seal';
-import { beatsForLoop, plateFrameAt } from './render/loop';
+import { beatsForLoop, breathLoop, fallbackLoopLength, plateFrameAt } from './render/loop';
 import { drawVerso } from './render/verso';
 import { Heartbeat } from './ui/audio';
 import { canvasPng, parsePlate, plateGif, plateJson } from './ui/export';
@@ -145,7 +145,7 @@ function resetSitting(): void {
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
   rawFace = null; rawAt = 0; reachX = 0; reachY = 0;
   pulseScale.reset(); breathScale.reset();
-  ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity;
+  ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity; tierSeen = 'rate';
   plate = null; pair = null; replayText = null;
   $('ledger-log').replaceChildren();
   $('flip').classList.remove('turned');
@@ -304,7 +304,9 @@ function frame(dt: number): void {
 
   if (stage === 'abandoned') {
     void stopSource();
-    toast('A second face appeared. The sitting stopped and nothing was kept.');
+    toast(sitting.abandonReason === 'timeout'
+      ? 'Five minutes passed without a clear exposure. The sitting stopped and nothing was kept. Try more light, or sit square to the camera.'
+      : 'A second face appeared. The sitting stopped and nothing was kept.');
     resetSitting();
     show('welcome');
     return;
@@ -330,7 +332,7 @@ function frame(dt: number): void {
       tierSeen = ph.tier;
       if (ph.sinceBeat < lastSince) heart.beat(0);
       lastSince = ph.sinceBeat;
-      flush = ph.sinceBeat < 0.08 ? ph.sinceBeat / 0.08 : Math.exp(-(ph.sinceBeat - 0.08) / (Math.max(0.25, ph.period * 0.55) / 3));
+      flush = flushEnvelope(ph.sinceBeat, ph.period);
       travel = Math.min(1, ph.sinceBeat / 0.45);
     }
   }
@@ -408,7 +410,8 @@ function beatVariation(beatTimes: readonly number[]): { a: number; b: number } |
 function finish(): void {
   if (!sitting) return;
   const wall = Date.now() / 1000;
-  const L = Math.min(6, Math.max(3, breath.period ?? 4));
+  const bl = breathLoop(breath.trace, breath.period);
+  const L = bl?.L ?? fallbackLoopLength(breath.period);
   const avgFace = faceSum && faceN > 0 ? faceSum.map((q) => ({ x: q.x / faceN, y: q.y / faceN })) : face ?? [];
   const trace = beats.trace.filter((s) => s.t > beats.toSignal(wall) - 6).map((s) => s.v);
   const step = Math.max(1, Math.ceil(trace.length / 240));
@@ -420,6 +423,7 @@ function finish(): void {
     beats: tierSeen === 'rate' ? beatsForLoop([], 0, L, pulse?.bpm ?? null) : beatsForLoop(beats.confirmedBeats, beats.toSignal(wall), L, pulse?.bpm ?? null),
     beatTier: tierSeen,
     breathPeriod: L,
+    breathCurve: bl?.curve,
     blinkTimes,
     ghosts: opts.ghosts ? ghosts : [],
     smile,

@@ -26,6 +26,7 @@ it.skipIf(!process.env.REC)('replays a recorded sitting through the stage machin
       clock += 1 / 30;
       sitting.tick(1 / 30, { readiness, talking, windowFocused: true, running,
         pulseReady: !!pulse?.ready && beats.tier(wall) != null, breathReady, hrvReady });
+      breath.hold(sitting.pause === 'talking'); // as the app does: only sustained talking freezes the breath
       const v = breath.value(), k = Math.floor(clock / 5) * 5;
       const m = motion.get(k) ?? { lo: 1, hi: 0, tlo: Infinity, thi: -Infinity };
       m.lo = Math.min(m.lo, v); m.hi = Math.max(m.hi, v); motion.set(k, m);
@@ -47,7 +48,7 @@ it.skipIf(!process.env.REC)('replays a recorded sitting through the stage machin
         motion.set(Math.floor(at / 5) * 5, m);
       }
       if (p.hrv) hrvReady = p.hrv.stable;
-      if (p.talking?.length) { talking = p.talking[p.talking.length - 1].detected; breath.hold(talking); }
+      if (p.talking?.length) talking = p.talking[p.talking.length - 1].detected;
     }
   }
   console.log('  breath per 5 s (wall time): bust motion range | raw chest swing');

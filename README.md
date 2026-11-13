@@ -1,6 +1,6 @@
 # Long Exposure
 
-**A 60-second living daguerreotype.** You sit for a portrait, as people did in 1840. The plate develops while you hold still, and the finished portrait flushes with your real heartbeat and breathes at your real breathing rate. No photograph of you is taken or kept.
+**A 60-second living daguerreotype.** You sit for a portrait, as people did in 1840. The plate develops while you hold still, and the finished portrait flushes with your real heartbeat and breathes with your own recorded breaths. No photograph of you is taken or kept.
 
 Built for the [DEV Presage SmartSpectra SDK Challenge](https://dev.to/challenges/presage-2026-11-04) with [`@smartspectra/node-sdk`](https://www.npmjs.com/package/@smartspectra/node-sdk).
 
@@ -10,33 +10,34 @@ Built for the [DEV Presage SmartSpectra SDK Challenge](https://dev.to/challenges
 
 ## How a sitting works
 
-The SDK needs time before each signal is reliable: about 12 s for pulse, 30 s for breathing and 60 s for HRV. Long Exposure does not hide that wait behind a spinner. The wait is the exposure.
+The SDK needs time before each signal is reliable: about 12 s for pulse and 30 s for breathing; HRV takes longer still (about two minutes in our sittings). Long Exposure does not hide that wait behind a spinner. The wait is the exposure.
 
 | Exposure | Stage | What the SDK provides | What you see |
 |---|---|---|---|
 | 0–12 s | **Focusing** | 478 face landmarks, blinks | A ghost of your face emerges as engraving lines on a silver plate |
 | 12–30 s | **Exposing the heart** | Pulse waveform and pulse rate | Each heartbeat sends a warm flush from forehead to chin, with a soft heartbeat sound |
 | 30–60 s | **Exposing the breath** | Breathing rate and chest trace | The bust rises and falls with your real chest trace, and is still when you hold your breath |
-| 60 s+ | **Fixing** | HRV (RMSSD, SDNN), or a locked pulse | A guilloché seal, unique to this sitting, is engraved in the corner |
+| 60 s+ | **Fixing** | A locked pulse (HRV if it has already arrived) | A guilloché seal, unique to this sitting, is engraved in the corner |
 
-Fixing starts at 60 s once HRV has arrived, or once the pulse is locked. When the SDK has not delivered HRV yet, the seal is drawn from the variation between the beats the studio detected itself.
+Fixing starts at 60 s once the pulse is locked. The SDK's HRV usually arrives later than that (after about two minutes in our sittings), so the seal is normally drawn from the variation between the beats the studio detected itself; if HRV has already arrived and is stable, it is used instead, and the ledger says which.
 
 The SDK works best on a still, silent, well-lit sitter, so the studio enforces exactly that:
 
 - **Talking caps the lens.** Speech spoils the breathing signal, so after 1.5 s of talking the exposure clock stops and the breathing trace holds still.
 - **Movement, leaving the frame, poor light or switching windows** also cap the lens. Short detector flickers are ignored: a cap needs 0.5 s of the same problem, and lifts after 0.3 s of a clean signal. The caption says what to fix.
-- **A second face** caps the lens at once. If it stays for 2 s, the sitting ends and everything is discarded.
+- **A second face** caps the lens at once. If it is seen for about 2 s in total (a flickering face still adds up), the sitting ends and everything is discarded.
+- **Five-minute limit.** If the lens stays capped (poor light, framing), the sitting ends after five minutes: as an underexposed plate if some exposure was made, otherwise with nothing kept. The SDK is not left running.
 - **Blinks** leave faint doubled "ghost" eyes, like on real long-exposure plates. This can be turned off.
 - **A smile held for 3 s** is exposed into the plate as a faint layer.
 - **Live traces** under the plate, drawn like a 19th-century kymograph (a needle scratching through soot on a turning drum): your real pulse waveform and chest trace from the SDK, scrolling as they arrive. Each lane rests flat until its signal has locked, and a held breath stays flat rather than being magnified. No numbers on the front.
 - **A framing guide** in the side panel shows the outline of your face against a dashed head-and-shoulders target, with one instruction ("Move to your left", "Move a little closer"). It is drawn from the face landmarks only, never from camera pixels, and turns green when you are well placed.
 - **Head style:** on the welcome screen, choose a soft shade (default), dark hair, or a bare head lit like skin.
-- A stage starts only when its signal is actually ready, never on a timer alone. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
+- A stage starts only when its signal is ready, never on a timer alone. "Ready" means the SDK marks the signal stable (for the pulse, a confidence of 40 or more also counts) and, for the pulse, that the studio is finding real beats in the waveform. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
 
 When the plate is developed the camera is released. The result screen runs at a lower frame rate, and the heartbeat sound fades out after a few beats (**Mute heartbeat** silences it). You can then:
 
-- **Turn the plate over.** The **verso** (back) shows the evidence: raw readouts, a stretch of your actual pulse waveform, which beat-timing method was used, and a timestamped log of everything that happened. The front never shows numbers.
-- **Save a GIF loop** (one breath long, with your own beat timings), PNGs of the front and back, or a `.plate.json` file.
+- **Turn the plate over.** The **verso** (back) shows the evidence: raw readouts, a stretch of your actual pulse waveform, which beat-timing method was used, and the last entries of the timestamped studio log. The front never shows numbers.
+- **Save a GIF loop** (your last whole breaths, about 8 s, from your real chest trace, with your own beat timings), PNGs of the front and back, or a `.plate.json` file.
 - **Double Exposure:** load someone else's saved plate and watch both portraits side by side, each beating in its own rhythm.
 
 ---
@@ -51,7 +52,7 @@ When the plate is developed the camera is released. The result screen runs at a 
 - A free SmartSpectra API key from [physiology.presagetech.com](https://physiology.presagetech.com/auth/register)
 
 ```bash
-git clone <this repo> long-exposure
+git clone https://github.com/TimothyBabatu13/long-exposure.git
 cd long-exposure
 npm install            # also downloads the SDK native runtime for every platform (a few hundred MB)
 cp .env.example .env   # then paste your key: SMARTSPECTRA_API_KEY=...
@@ -182,7 +183,7 @@ The full statement is in **[docs/PRIVACY.md](docs/PRIVACY.md)**. In short:
   - A second face stops the sitting.
   - The lens caps when you talk, move or switch windows.
   - **Leave the studio** wipes everything.
-- **No frames are stored, drawn or exported.** The portrait is made from face geometry and rhythm only.
+- **No frames are stored or exported, and none are drawn on the plate.** The portrait is made from face geometry and rhythm only. (The optional "Show me the camera" mirror shows the live camera to the sitter while it is open; it is off by default and never recorded.)
 - **Memory only:** nothing is written to disk except files the sitter saves through a save dialog.
 - **The app sends nothing:**
   - A strict CSP is in place, and the main process blocks and logs any request from the page.
@@ -222,7 +223,7 @@ Live sittings with the SDK on a real camera (Windows, 4-core laptop) complete en
 
 - [x] The native camera path holds the frame rate (no more code 14)
 - [x] The landmark topology matches the 478-point face mesh
-- [ ] Waveform lag and the resulting beat tier, recorded here
+- [x] Beat timing tier: replaying the two recorded live sittings, the pulse waveform arrived too late for `waveform` timing; one sitting ran on `predicted` and the other on `rate` (see Beat timing tiers below)
 - [ ] Network audit of SDK traffic (docs/PRIVACY.md)
 - [ ] Tested in poor light, with glasses, and across skin tones (camera pulse readings are weaker on darker skin and in low light)
 

@@ -77,6 +77,12 @@ export interface Plate {
   beats: number[];
   beatTier: BeatTier;
   breathPeriod: number;
+  /**
+   * The sitter's own chest trace over one loop (breathPeriod seconds), 0..1,
+   * evenly spaced and joined end to start. Plates from before 2026-11-13 lack
+   * it and breathe on a cosine.
+   */
+  breathCurve?: number[];
   blinkTimes: number[];
   /** Eye contours captured at blinks, drawn as double-exposure ghosts. */
   ghosts: Point[][];
@@ -126,8 +132,6 @@ export interface StudioBridge {
     start(): Promise<void>;
     stop(): Promise<void>;
     onMetrics(cb: (buf: Uint8Array) => void): () => void;
-    /** Accumulated results; used only for HRV, which may not arrive in onMetrics. */
-    onAccumulated(cb: (buf: Uint8Array) => void): () => void;
     onValidation(cb: (code: number, hint: string) => void): () => void;
     onRunning(cb: (running: boolean) => void): () => void;
     onError(cb: (code: number, message: string) => void): () => void;
