@@ -12,6 +12,7 @@ import { drawVerso } from './render/verso';
 import { Heartbeat } from './ui/audio';
 import { canvasPng, parsePlate, plateGif, plateJson } from './ui/export';
 import { drawGuide, frameFor, placement } from './ui/framing';
+import { breathScale, drawKymograph, pulseScale } from './ui/kymograph';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const isWeb = typeof __WEB_BUILD__ !== 'undefined' && __WEB_BUILD__;
@@ -143,6 +144,7 @@ function resetSitting(): void {
   sitting = null; running = false; readiness = 'no-face'; readinessHint = ''; talking = false; blinking = false;
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
   rawFace = null; rawAt = 0; reachX = 0; reachY = 0;
+  pulseScale.reset(); breathScale.reset();
   ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity;
   plate = null; pair = null; replayText = null;
   $('ledger-log').replaceChildren();
@@ -351,6 +353,14 @@ function frame(dt: number): void {
     : sitting.pause ? pauseCopy[sitting.pause] : stageCopy[stage];
 
   updateGuide(wall);
+  const kymo = $<HTMLCanvasElement>('kymo');
+  const kw = Math.round(kymo.clientWidth * devicePixelRatio), kh = Math.round(kymo.clientHeight * devicePixelRatio);
+  if (kw > 0 && (kymo.width !== kw || kymo.height !== kh)) { kymo.width = kw; kymo.height = kh; }
+  drawKymograph(kymo.getContext('2d')!, {
+    pulse: beats.trace, breath: breath.trace,
+    pulseOn: stage !== 'focusing', breathOn: breathing,
+    capped: state.capped,
+  });
 
   if (opts.mirror && source?.preview) {
     const v = $<HTMLVideoElement>('mirror');

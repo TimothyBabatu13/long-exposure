@@ -60,6 +60,8 @@ export class BreathTracker {
   get rate(): number | null { return this.rpm; }
   get isStable(): boolean { return this.stable; }
   get mode(): 'trace' | 'none' { return this.source; }
+  /** The chest trace received in the last WINDOW_S seconds (for the live strip). */
+  get trace(): readonly Sample[] { return this.buf; }
 
   /** 0..1 chest rise now. `_now` is kept for API compatibility; only the trace matters. */
   value(_now?: number): number {
