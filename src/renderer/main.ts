@@ -388,7 +388,8 @@ function currentSeal() {
   // Without SDK HRV, the seal's variation comes from the beat-to-beat intervals
   // of the detected pulse peaks. This only shapes the artwork; the verso never
   // shows these as HRV readings.
-  const v = hrv ? { a: hrv.rmssd, b: hrv.sdnn } : beatVariation(beats.confirmedBeats);
+  // SDK HRV is used only once the SDK marks it stable.
+  const v = hrv?.ready ? { a: hrv.rmssd, b: hrv.sdnn } : beatVariation(beats.confirmedBeats);
   return sealFrom({ bpm: pulse?.bpm ?? null, rpm: breathRate?.rpm ?? null, rmssd: v?.a ?? null, sdnn: v?.b ?? null });
 }
 
@@ -432,8 +433,9 @@ function finish(): void {
     verso: {
       pulseBpm: pulse?.bpm ?? null,
       breathRpm: breathRate?.rpm ?? null,
-      rmssd: hrv?.rmssd ?? null,
-      sdnn: hrv?.sdnn ?? null,
+      // Only settled HRV is printed; an early, unstable value would be noise presented as a reading.
+      rmssd: hrv?.ready ? hrv.rmssd : null,
+      sdnn: hrv?.ready ? hrv.sdnn : null,
       pulseConfidence: pulse?.confidence ?? null,
       traceExcerpt: trace.filter((_, i) => i % step === 0),
       ledger: [...sitting.ledger],
@@ -455,7 +457,9 @@ function showPlate(p: Plate): void {
   const back = $<HTMLCanvasElement>('back');
   back.width = 720; back.height = 720;
   drawVerso(back, p);
-  $('endcard').textContent = `0 frames saved · 0 bytes sent by this app · 1 plate made${p.verso.source !== 'live' ? ` · ${p.verso.source.toUpperCase()} DATA` : ''}`;
+  // The page's requests are counted (and blocked) by the main process; the SDK's own
+  // traffic to Presage is not, so the card says so rather than claiming zero bytes.
+  $('endcard').textContent = `0 frames saved · ${netCount === 0 ? 'no' : netCount} page requests (blocked) · the SDK contacts Presage · 1 plate made${p.verso.source !== 'live' ? ` · ${p.verso.source.toUpperCase()} DATA` : ''}`;
   const t0 = performance.now();
   let lastTravel = 1, lastDraw = -Infinity;
   resultBeats = 0;

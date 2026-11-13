@@ -32,12 +32,12 @@ The SDK works best on a still, silent, well-lit sitter, so the studio enforces e
 - **Live traces** under the plate, drawn like a 19th-century kymograph (a needle scratching through soot on a turning drum): your real pulse waveform and chest trace from the SDK, scrolling as they arrive. Each lane rests flat until its signal has locked, and a held breath stays flat rather than being magnified. No numbers on the front.
 - **A framing guide** in the side panel shows the outline of your face against a dashed head-and-shoulders target, with one instruction ("Move to your left", "Move a little closer"). It is drawn from the face landmarks only, never from camera pixels, and turns green when you are well placed.
 - **Head style:** on the welcome screen, choose a soft shade (default), dark hair, or a bare head lit like skin.
-- A stage starts only when its signal is ready, never on a timer alone. "Ready" means the SDK marks the signal stable (for the pulse, a confidence of 40 or more also counts) and, for the pulse, that the studio is finding real beats in the waveform. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
+- A stage starts only when its signal is ready, never on a timer alone. "Ready" means the SDK marks the signal stable (for the pulse, a confidence of 40 or more also counts). The pulse stage then draws beats at the best timing it has (see Beat timing tiers): real peaks when the waveform allows, otherwise evenly spaced at the SDK's pulse rate. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
 
 When the plate is developed the camera is released. The result screen runs at a lower frame rate, and the heartbeat sound fades out after a few beats (**Mute heartbeat** silences it). You can then:
 
 - **Turn the plate over.** The **verso** (back) shows the evidence: raw readouts, a stretch of your actual pulse waveform, which beat-timing method was used, and the last entries of the timestamped studio log. The front never shows numbers.
-- **Save a GIF loop** (your last whole breaths, about 8 s, from your real chest trace, with your own beat timings), PNGs of the front and back, or a `.plate.json` file.
+- **Save a GIF loop** (your last whole breaths, about 8 s, from your real chest trace; the beats are your own detected beats when the waveform gave clear peaks, otherwise evenly spaced at your pulse rate, and the verso says which), PNGs of the front and back, or a `.plate.json` file.
 - **Double Exposure:** load someone else's saved plate and watch both portraits side by side, each beating in its own rhythm.
 
 ---
