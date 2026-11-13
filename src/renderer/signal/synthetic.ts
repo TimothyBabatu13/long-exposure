@@ -62,8 +62,11 @@ export function syntheticFace(): Point[] {
     const a = hash(i) * 2 * Math.PI, r = Math.sqrt(hash(i + 999)) * 0.92;
     p[i] = { x: 320 + 118 * r * Math.cos(a), y: 250 + 158 * r * Math.sin(a) };
   }
-  baseFace = p;
-  return p;
+  // Seat the face as a well-framed sitter would be: about 40 % of the frame
+  // height, a third of the way down, so the framing guide reads "well placed".
+  // (The plate normalises the face, so this does not change the portrait.)
+  baseFace = p.map((q) => ({ x: 320 + (q.x - 320) * 0.6, y: 160 + (q.y - 250) * 0.6 }));
+  return baseFace;
 }
 
 export function syntheticPacket(t0: number, from: number, to: number): SignalPacket {

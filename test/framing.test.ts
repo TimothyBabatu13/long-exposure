@@ -33,3 +33,13 @@ describe('framing guide', () => {
     expect(low.advice).toBe('Move up, or tilt the screen down');
   });
 });
+
+describe('framing guide with the synthetic sitter', () => {
+  it('reads "well placed" so a sitting without a key does not nag', async () => {
+    const { syntheticFace } = await import('../src/renderer/signal/synthetic');
+    const pts = syntheticFace();
+    let mx = 0, my = 0;
+    for (const q of pts) { mx = Math.max(mx, q.x); my = Math.max(my, q.y); }
+    expect(placement(pts, frameFor(mx, my))!.advice).toBe('');
+  });
+});
