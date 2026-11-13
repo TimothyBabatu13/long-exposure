@@ -33,8 +33,17 @@ const UNDEREXPOSED_REASON = {
   heart: 'the breathing never settled',
   breath: 'the pulse was lost before the plate could be fixed',
 } as const;
-/** A second face must persist this long before the sitting is abandoned (single-frame detector flickers are ignored). */
+/**
+ * A second face must be seen for this long before the sitting is abandoned.
+ * Single-frame detector flickers are ignored: time without the second face
+ * counts down at half speed, so a face that keeps flickering in still adds up.
+ */
 export const SECOND_FACE_ABANDON_S = 2;
+/**
+ * Wall-clock limit for a whole sitting, pauses included. A sitter who can never
+ * get uncapped (bad light, framing) is not left waiting while the SDK runs.
+ */
+export const MAX_SITTING_S = 300;
 /** A flickering problem must last this long before the lens caps (seconds). */
 export const CAP_DELAY_S = 0.5;
 /** ...and be gone this long before it uncaps. */
@@ -55,9 +64,12 @@ export class Sitting {
   underexposed = false;
   /** Which signal never settled, when the plate is underexposed. */
   underexposedReason: string | null = null;
+  /** Why the sitting was abandoned: a second face, or no exposure before the time limit. */
+  abandonReason: 'crowd' | 'timeout' | null = null;
   readonly ledger: LedgerEntry[] = [];
   private fixedAt: number | null = null;
   private secondFaceFor = 0;
+  private elapsed = 0;
   private pending: PauseReason | null = null;
   private pendingFor = 0;
 
@@ -91,11 +103,28 @@ export class Sitting {
     // A second face ends the sitting: the plate is for one consenting person.
     // The detector flickers, so the lens caps at once but the sitting is only
     // abandoned if the second face stays for SECOND_FACE_ABANDON_S.
-    this.secondFaceFor = i.readiness === 'multiple-faces' ? this.secondFaceFor + dt : 0;
+    this.secondFaceFor = i.readiness === 'multiple-faces' ? this.secondFaceFor + dt : Math.max(0, this.secondFaceFor - dt / 2);
     if (this.secondFaceFor >= SECOND_FACE_ABANDON_S) {
       this.stage = 'abandoned';
+      this.abandonReason = 'crowd';
       this.log('face', 'second face in frame: sitting stopped, nothing kept');
       return this.stage;
+    }
+
+    // Time limit. With some exposure the plate develops (underexposed if it
+    // never fixed); with none there is no portrait to make, so the sitting ends.
+    this.elapsed += dt;
+    if (this.elapsed >= MAX_SITTING_S && this.stage !== 'fixing') {
+      if (this.exposure < 5) {
+        this.stage = 'abandoned';
+        this.abandonReason = 'timeout';
+        this.log('stage', 'no exposure in five minutes: sitting stopped, nothing kept');
+        return this.stage;
+      }
+      this.underexposed = true;
+      this.underexposedReason = 'the sitting ran out of time with the lens capped';
+      this.pause = null;
+      this.enter('fixing', `${this.underexposedReason}: the plate is underexposed`);
     }
 
     // The SDK's readiness and talking flags flicker frame to frame. A problem
@@ -116,6 +145,14 @@ export class Sitting {
         this.pendingFor = 0;
       }
     }
+    // Fixing takes FIX_DURATION_S of wall-clock time, capped or not: the
+    // exposure is already made.
+    if (this.stage === 'fixing') {
+      if (!this.pause) this.exposure += dt; // the ledger keeps counting exposure while it fixes
+      this.fixedAt ??= this.elapsed;
+      if (this.elapsed - this.fixedAt >= FIX_DURATION_S) this.enter('developed', 'plate developed');
+      return this.stage;
+    }
     if (this.pause) return this.stage;
 
     this.exposure += dt;
@@ -129,15 +166,11 @@ export class Sitting {
       this.enter('fixing', i.hrvReady ? 'rhythm settled (with HRV): fixing the plate' : 'rhythm settled: fixing the plate');
     }
 
-    if (this.stage !== 'fixing' && e >= MAX_EXPOSURE_S) {
+    if ((this.stage as Stage) !== 'fixing' && e >= MAX_EXPOSURE_S) {
       this.underexposed = true;
       // Name the signal that never settled, not a guess at the cause.
       this.underexposedReason = UNDEREXPOSED_REASON[this.stage as 'focusing' | 'heart' | 'breath'] ?? UNDEREXPOSED_REASON.breath;
       this.enter('fixing', `${this.underexposedReason}: the plate is underexposed`);
-    }
-    if (this.stage === 'fixing') {
-      this.fixedAt ??= e;
-      if (e - this.fixedAt >= FIX_DURATION_S) this.enter('developed', 'plate developed');
     }
     return this.stage;
   }

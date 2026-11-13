@@ -304,7 +304,9 @@ function frame(dt: number): void {
 
   if (stage === 'abandoned') {
     void stopSource();
-    toast('A second face appeared. The sitting stopped and nothing was kept.');
+    toast(sitting.abandonReason === 'timeout'
+      ? 'Five minutes passed without a clear exposure. The sitting stopped and nothing was kept. Try more light, or sit square to the camera.'
+      : 'A second face appeared. The sitting stopped and nothing was kept.');
     resetSitting();
     show('welcome');
     return;

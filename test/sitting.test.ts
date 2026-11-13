@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, TALK_CAP_DELAY_S, type SittingInputs } from '../src/renderer/sitting/machine';
+import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, TALK_CAP_DELAY_S, MAX_SITTING_S, type SittingInputs } from '../src/renderer/sitting/machine';
 
 const still: SittingInputs = {
   readiness: 'ok', talking: false, windowFocused: true, running: true,
@@ -126,5 +126,43 @@ describe('Sitting: talking', () => {
     run(t, 5);
     run(t, CAP_DELAY_S + 0.2, { readiness: 'motion' });
     expect(t.pause).toBe('motion');
+  });
+});
+
+describe('sitting limits', () => {
+  it('a second face that keeps flickering still ends the sitting', () => {
+    const s = new Sitting();
+    run(s, 10);
+    // 0.3 s of second face, 0.2 s without, over and over: the old timer reset every gap.
+    for (let k = 0; k < 40 && s.stage !== 'abandoned'; k++) {
+      for (let t = 0; t < 0.3; t += 0.1) s.tick(0.1, { ...still, readiness: 'multiple-faces' });
+      for (let t = 0; t < 0.2; t += 0.1) s.tick(0.1, still);
+    }
+    expect(s.stage).toBe('abandoned');
+    expect(s.abandonReason).toBe('crowd');
+  });
+
+  it('a single flicker does not end it', () => {
+    const s = new Sitting();
+    run(s, 10);
+    s.tick(0.1, { ...still, readiness: 'multiple-faces' });
+    run(s, 20);
+    expect(s.stage).not.toBe('abandoned');
+  });
+
+  it('stops after five minutes with no exposure, keeping nothing', () => {
+    const s = new Sitting();
+    for (let t = 0; t < MAX_SITTING_S + 1; t += 0.5) s.tick(0.5, { ...still, readiness: 'too-dark' });
+    expect(s.stage).toBe('abandoned');
+    expect(s.abandonReason).toBe('timeout');
+  });
+
+  it('develops an underexposed plate if the lens stays capped after some exposure', () => {
+    const s = new Sitting();
+    run(s, 20);
+    for (let t = 0; t < MAX_SITTING_S; t += 0.5) s.tick(0.5, { ...still, readiness: 'too-dark' });
+    for (let t = 0; t < 4; t += 0.5) s.tick(0.5, { ...still, readiness: 'too-dark' });
+    expect(s.stage).toBe('developed');
+    expect(s.underexposed).toBe(true);
   });
 });
