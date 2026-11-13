@@ -13,6 +13,8 @@ const STATES: HarnessState[] = [
   { name: '3-inhale', frame: { development: 0.9, breath: 1 } },
   { name: '4-developed', frame: { development: 1, seal: { params: sealFrom({ bpm: 72, rpm: 15, rmssd: 35, sdnn: 45 }), progress: 1 } } },
   { name: '5-underexposed', frame: { development: 1 } },
+  { name: '6-head-dark', frame: { development: 1, head: 'dark' } },
+  { name: '7-head-bare', frame: { development: 1, head: 'bare' } },
 ];
 
 declare global {

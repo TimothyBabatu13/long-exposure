@@ -1,5 +1,5 @@
 // The studio: wires signal sources, the sitting, the renderer and the UI.
-import type { Plate, Point, Readiness, SourceEvent, LedgerEntry, BeatTier } from '../shared/types';
+import type { Plate, Point, Readiness, SourceEvent, LedgerEntry, BeatTier, HeadStyle } from '../shared/types';
 import { BeatTracker } from './signal/beats';
 import { BreathTracker } from './signal/breath';
 import { LiveSource, ReplaySource, SyntheticSource, type SignalSource } from './signal/sources';
@@ -128,7 +128,8 @@ let lastSince = Infinity;
 let tierSeen: BeatTier = 'rate';
 let plate: Plate | null = null;
 let pair: Plate | null = null;
-let opts = { sound: true, ghosts: true, gentle: false, mirror: false, name: 'Sitter' };
+let opts: { sound: boolean; ghosts: boolean; gentle: boolean; mirror: boolean; name: string; head: HeadStyle } =
+  { sound: true, ghosts: true, gentle: false, mirror: false, name: 'Sitter', head: 'soft' };
 
 function resetSitting(): void {
   cancelAnimationFrame(raf);
@@ -164,6 +165,7 @@ async function begin(): Promise<void> {
     gentle: $<HTMLInputElement>('opt-gentle').checked,
     mirror: $<HTMLInputElement>('opt-mirror').checked,
     name: $<HTMLInputElement>('opt-name').value.trim() || 'Sitter',
+    head: $<HTMLSelectElement>('opt-head').value as HeadStyle,
   };
   heart.enabled = opts.sound;
   heart.volume = 0.5;
@@ -331,7 +333,7 @@ function frame(dt: number): void {
     ghosts, smile,
     seal: fixing && !sitting.underexposed ? { params: currentSeal(), progress: Math.min(1, (sitting.exposure - 60) / 3) } : null,
     capped: sitting.pause != null && sitting.pause !== 'starting',
-    gentle: opts.gentle, time: wall,
+    gentle: opts.gentle, time: wall, head: opts.head,
   };
   renderer.render(state);
 
@@ -402,6 +404,7 @@ function finish(): void {
     ghosts: opts.ghosts ? ghosts : [],
     smile,
     seal: sitting.underexposed ? null : currentSeal(),
+    head: opts.head,
     verso: {
       pulseBpm: pulse?.bpm ?? null,
       breathRpm: breathRate?.rpm ?? null,

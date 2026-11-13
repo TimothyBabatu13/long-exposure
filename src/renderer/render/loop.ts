@@ -34,6 +34,7 @@ export function plateFrameAt(plate: Plate, t: number, opts: { gentle: boolean; g
     capped: false,
     gentle: opts.gentle,
     time: t,
+    head: plate.head ?? 'dark',
   };
 }
 

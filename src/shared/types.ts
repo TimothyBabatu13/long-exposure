@@ -43,6 +43,9 @@ export interface SignalPacket {
 
 export type SourceKind = 'live' | 'replay' | 'synthetic';
 
+/** How the top of the head is drawn: a neutral soft shade, dark hair, or a bare (bald or close-cropped) head lit like skin. */
+export type HeadStyle = 'soft' | 'dark' | 'bare';
+
 export type SourceEvent =
   | { type: 'packet'; packet: SignalPacket }
   | { type: 'readiness'; readiness: Readiness; hint: string }
@@ -81,6 +84,8 @@ export interface Plate {
   smile: Point[] | null;
   /** Null when the plate is underexposed: the seal marks a settled rhythm. */
   seal: SealParams | null;
+  /** Head style chosen by the sitter (plates from before 2026-11-13 lack it: 'dark'). */
+  head?: HeadStyle;
   /** Readouts for the verso only. Never drawn on the front. */
   verso: {
     pulseBpm: number | null;
