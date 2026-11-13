@@ -77,6 +77,12 @@ export interface Plate {
   beats: number[];
   beatTier: BeatTier;
   breathPeriod: number;
+  /**
+   * The sitter's own chest trace over one loop (breathPeriod seconds), 0..1,
+   * evenly spaced and joined end to start. Plates from before 2026-11-13 lack
+   * it and breathe on a cosine.
+   */
+  breathCurve?: number[];
   blinkTimes: number[];
   /** Eye contours captured at blinks, drawn as double-exposure ghosts. */
   ghosts: Point[][];

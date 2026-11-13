@@ -7,7 +7,7 @@ import { Sitting, pauseCopy, type Stage } from './sitting/machine';
 import { PlateRenderer, type FrameState } from './render/plate';
 import { LEFT_EYE, LIPS_OUTER, RIGHT_EYE, normalise, smoothToward, topologyLooksRight } from './render/landmarks';
 import { sealFrom } from './render/seal';
-import { beatsForLoop, plateFrameAt } from './render/loop';
+import { beatsForLoop, breathLoop, fallbackLoopLength, plateFrameAt } from './render/loop';
 import { drawVerso } from './render/verso';
 import { Heartbeat } from './ui/audio';
 import { canvasPng, parsePlate, plateGif, plateJson } from './ui/export';
@@ -408,7 +408,8 @@ function beatVariation(beatTimes: readonly number[]): { a: number; b: number } |
 function finish(): void {
   if (!sitting) return;
   const wall = Date.now() / 1000;
-  const L = Math.min(6, Math.max(3, breath.period ?? 4));
+  const bl = breathLoop(breath.trace, breath.period);
+  const L = bl?.L ?? fallbackLoopLength(breath.period);
   const avgFace = faceSum && faceN > 0 ? faceSum.map((q) => ({ x: q.x / faceN, y: q.y / faceN })) : face ?? [];
   const trace = beats.trace.filter((s) => s.t > beats.toSignal(wall) - 6).map((s) => s.v);
   const step = Math.max(1, Math.ceil(trace.length / 240));
@@ -420,6 +421,7 @@ function finish(): void {
     beats: tierSeen === 'rate' ? beatsForLoop([], 0, L, pulse?.bpm ?? null) : beatsForLoop(beats.confirmedBeats, beats.toSignal(wall), L, pulse?.bpm ?? null),
     beatTier: tierSeen,
     breathPeriod: L,
+    breathCurve: bl?.curve,
     blinkTimes,
     ghosts: opts.ghosts ? ghosts : [],
     smile,
