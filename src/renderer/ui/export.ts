@@ -64,7 +64,10 @@ export function parsePlate(text: string): Plate {
     const sp = p.seal as unknown as Record<string, unknown>;
     if (!Object.values(sp).every(isNum) || !isNum(sp.lobes) || sp.lobes > 64 || !isNum(sp.rings) || sp.rings > 64) bad('seal');
   }
+  if (!['waveform', 'predicted', 'rate'].includes(p.beatTier)) bad('beat tier');
+  if (p.head != null && !['soft', 'dark', 'bare'].includes(p.head)) bad('head');
   const v = p.verso;
+  if (v && !['live', 'replay', 'synthetic'].includes(v.source)) bad('source');
   if (!v || ![v.pulseBpm, v.breathRpm, v.rmssd, v.sdnn, v.pulseConfidence].every(numsOrNull)) bad('readouts');
   if (!Array.isArray(v.traceExcerpt) || !v.traceExcerpt.every(isNum) || !Array.isArray(v.ledger)) bad('verso');
   return p;

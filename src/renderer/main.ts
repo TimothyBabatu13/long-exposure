@@ -58,7 +58,9 @@ async function init(): Promise<void> {
   bridge?.onNetwork((e) => {
     netCount++;
     $('net-count').textContent = String(netCount);
-    addLedger({ at: sitting?.exposure ?? 0, kind: 'privacy', text: `blocked request to ${new URL(e.url).host}` });
+    let host = 'an unknown address';
+    try { host = new URL(e.url).host || e.url; } catch { /* malformed URL: keep the generic label */ }
+    addLedger({ at: sitting?.exposure ?? 0, kind: 'privacy', text: `blocked request to ${host}` });
   });
 
   $('btn-sit').addEventListener('click', () => void begin());
@@ -300,7 +302,8 @@ function onSource(e: SourceEvent): void {
   const wall = Date.now() / 1000;
   if (p.blinking?.length) {
     const now = p.blinking.some((b) => b.detected);
-    if (now && !blinking && wall - lastBlinkAt > 0.4) onBlink(wall);
+    // The blink flag can drop for a frame mid-blink; 0.8 s keeps one blink one entry.
+    if (now && !blinking && wall - lastBlinkAt > 0.8) onBlink(wall);
     blinking = now;
   }
   if (p.smile) {

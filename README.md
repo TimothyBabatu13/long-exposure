@@ -1,6 +1,6 @@
 # Long Exposure
 
-**A 60-second living daguerreotype.** You sit for a portrait, as people did in 1840. The plate develops while you hold still, and the finished portrait flushes with your real heartbeat and breathes with your own recorded breaths. No photograph of you is taken or kept.
+**A 60-second living daguerreotype.** You sit for a portrait, as people did in 1840. The plate develops while you hold still, and the finished portrait flushes at the pace of your real pulse and breathes with your own recorded breaths. No photograph of you is taken or kept.
 
 **Try it in your browser, no install or key:** [timothybabatu13.github.io/long-exposure](https://timothybabatu13.github.io/long-exposure/). Press **Watch a real sitting** to play back a real 90-second sitting recorded with the SDK.
 
