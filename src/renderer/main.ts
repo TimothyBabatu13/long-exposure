@@ -16,7 +16,10 @@ import { breathScale, drawKymograph, pulseScale } from './ui/kymograph';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const isWeb = typeof __WEB_BUILD__ !== 'undefined' && __WEB_BUILD__;
-const bridge = window.studio;
+// The preload's bridge, in the desktop app only. On the web, `window.studio`
+// is the <section id="studio"> element (browsers expose ids as globals), so
+// the bridge is recognised by its API, never by the name alone.
+const bridge = !isWeb && typeof (window.studio as { config?: unknown } | undefined)?.config === 'function' ? window.studio : undefined;
 
 // ---------------------------------------------------------------------------
 // Configuration and the welcome screen
