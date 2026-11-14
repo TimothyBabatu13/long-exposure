@@ -2,6 +2,7 @@
 // code as the app (BeatTracker, Sitting; see src/renderer/main.ts) and prints
 // the ledger, so stage logic can be tuned without another live sitting.
 import { readFileSync } from 'node:fs';
+import { ReadyLatch } from '../src/renderer/signal/latch';
 import { it } from 'vitest';
 
 // Run with: REC=recordings/<file>.ndjson npx vitest run test/replay.test.ts
@@ -19,13 +20,14 @@ it.skipIf(!process.env.REC)('replays a recorded sitting through the stage machin
   const motion = new Map<number, { lo: number; hi: number; tlo: number; thi: number }>();
   const sitting = new Sitting((e) => console.log(`  ${e.at.toFixed(1).padStart(6)}s  ${e.kind}: ${e.text}`));
   let running = false, readiness: Readiness = 'no-face', talking = false;
-  let pulse: { ready: boolean } | null = null, breathReady = false, hrvReady = false;
+  // Same gates as the app: latched readiness.
+  const pulseLatch = new ReadyLatch(), breathLatch = new ReadyLatch(), hrvLatch = new ReadyLatch();
   let clock = 0, wall = 0;
   const tick = (to: number) => {
     while (clock + 1 / 30 <= to) {
       clock += 1 / 30;
       sitting.tick(1 / 30, { readiness, talking, windowFocused: true, running,
-        pulseReady: !!pulse?.ready && beats.tier(wall) != null, breathReady, hrvReady });
+        pulseReady: pulseLatch.ready(wall) && beats.tier(wall) != null, breathReady: breathLatch.ready(wall), hrvReady: hrvLatch.ready(wall) });
       breath.hold(sitting.pause === 'talking'); // as the app does: only sustained talking freezes the breath
       const v = breath.value(), k = Math.floor(clock / 5) * 5;
       const m = motion.get(k) ?? { lo: 1, hi: 0, tlo: Infinity, thi: -Infinity };
@@ -39,15 +41,15 @@ it.skipIf(!process.env.REC)('replays a recorded sitting through the stage machin
     else if (e.type === 'packet') {
       const p = e.packet; wall = p.arrival;
       if (p.pulseTrace) beats.push(p.pulseTrace, p.arrival);
-      if (p.pulseRate) { beats.setRate(p.pulseRate.bpm); pulse = { ready: p.pulseRate.stable || p.pulseRate.confidence >= 40 }; }
-      if (p.breathRate) { breathReady = p.breathRate.stable; breath.setRate(p.breathRate.rpm, p.breathRate.stable); }
+      if (p.pulseRate) { beats.setRate(p.pulseRate.bpm); pulseLatch.update(p.pulseRate.stable || p.pulseRate.confidence >= 40, wall); }
+      if (p.breathRate) { breathLatch.update(p.breathRate.stable, wall); breath.setRate(p.breathRate.rpm, p.breathRate.stable); }
       if (p.breathTrace) {
         breath.push(p.breathTrace);
         const m = motion.get(Math.floor(at / 5) * 5) ?? { lo: 1, hi: 0, tlo: Infinity, thi: -Infinity };
         for (const s of p.breathTrace) { m.tlo = Math.min(m.tlo, s.v); m.thi = Math.max(m.thi, s.v); }
         motion.set(Math.floor(at / 5) * 5, m);
       }
-      if (p.hrv) hrvReady = p.hrv.stable;
+      if (p.hrv) hrvLatch.update(p.hrv.stable, wall);
       if (p.talking?.length) talking = p.talking[p.talking.length - 1].detected;
     }
   }

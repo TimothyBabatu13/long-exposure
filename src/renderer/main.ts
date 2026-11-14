@@ -2,6 +2,7 @@
 import type { Plate, Point, Readiness, SourceEvent, LedgerEntry, BeatTier, HeadStyle } from '../shared/types';
 import { BeatTracker, flushEnvelope } from './signal/beats';
 import { BreathTracker } from './signal/breath';
+import { ReadyLatch } from './signal/latch';
 import { LiveSource, ReplaySource, SyntheticSource, type SignalSource } from './signal/sources';
 import { Sitting, pauseCopy, type Stage } from './sitting/machine';
 import { PlateRenderer, type FrameState } from './render/plate';
@@ -26,16 +27,29 @@ const bridge = !isWeb && typeof (window.studio as { config?: unknown } | undefin
 // ---------------------------------------------------------------------------
 let config = { hasApiKey: false, telemetry: false, record: false, version: 'web' };
 let replayText: string | null = null;
+/** Without a live camera, the recorded sitting is the main action. */
+let samplePrimary = false;
+
+/** Make "Watch a real sitting" the primary button; "I agree to sit" then runs the synthetic sitting. */
+function preferSample(): void {
+  samplePrimary = true;
+  const sit = $('btn-sit'), sample = $('btn-sample');
+  sit.classList.replace('primary', 'secondary');
+  sample.classList.replace('secondary', 'primary');
+  sample.innerHTML = 'Watch a real sitting <kbd>Enter</kbd>';
+  sit.textContent = 'Try a synthetic sitting';
+  sample.after(sit);
+}
 
 async function init(): Promise<void> {
   if (bridge) config = { ...config, ...(await bridge.config()) };
   const banner = $('source-banner');
   if (isWeb || !bridge) {
-    banner.textContent = 'Web demo: no camera is used. "Watch a real sitting" plays back a real 90-second sitting recorded with the SmartSpectra SDK; "I agree to sit" runs a SYNTHETIC one. Install the app for a live sitting.';
-    banner.classList.add('warn');
+    banner.textContent = 'Web demo, no camera: "Watch a real sitting" plays back a real sitting recorded live with the SmartSpectra SDK (its signals and face landmarks, no video). A live sitting needs the desktop app and an API key.';
+    preferSample();
   } else if (!config.hasApiKey) {
-    banner.textContent = 'No SmartSpectra API key found (SMARTSPECTRA_API_KEY). "Watch a real sitting" plays back a real recorded sitting; "I agree to sit" runs a SYNTHETIC demo. See README for setup.';
-    banner.classList.add('warn');
+    banner.textContent = 'No API key set, so no live sitting: "Watch a real sitting" plays back a real sitting recorded with the SmartSpectra SDK. Add SMARTSPECTRA_API_KEY for a live sitting (see README).';
+    preferSample();
   } else {
     banner.textContent = `Live sitting: SmartSpectra SDK on this device's camera. Telemetry ${config.telemetry ? 'ON (you opted in)' : 'off'}.`;
   }
@@ -44,12 +58,17 @@ async function init(): Promise<void> {
   bridge?.onNetwork((e) => {
     netCount++;
     $('net-count').textContent = String(netCount);
-    addLedger({ at: sitting?.exposure ?? 0, kind: 'privacy', text: `blocked request to ${new URL(e.url).host}` });
+    let host = 'an unknown address';
+    try { host = new URL(e.url).host || e.url; } catch { /* malformed URL: keep the generic label */ }
+    addLedger({ at: sitting?.exposure ?? 0, kind: 'privacy', text: `blocked request to ${host}` });
   });
 
   $('btn-sit').addEventListener('click', () => void begin());
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && $('welcome').classList.contains('active')) void begin();
+    // Enter takes the primary action: a live sitting, or the recorded one without a key.
+    if (e.key === 'Enter' && $('welcome').classList.contains('active') && document.activeElement?.tagName !== 'INPUT') {
+      if (samplePrimary) $('btn-sample').click(); else void begin();
+    }
   });
   // A real sitting recorded with the SDK, bundled for anyone without a key or
   // camera. It holds signals and face geometry only, never frames.
@@ -117,6 +136,8 @@ let renderer: PlateRenderer | null = null;
 const beats = new BeatTracker();
 const breath = new BreathTracker();
 const heart = new Heartbeat();
+/** Stage gates: each signal counts as ready for a while after the SDK last marked it stable. */
+const pulseLatch = new ReadyLatch(), breathLatch = new ReadyLatch(), hrvLatch = new ReadyLatch();
 let raf = 0;
 let netCount = 0;
 let focused = true;
@@ -158,6 +179,7 @@ function resetSitting(): void {
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
   rawFace = null; rawAt = 0; reachX = 0; reachY = 0;
   pulseScale.reset(); breathScale.reset();
+  pulseLatch.reset(); breathLatch.reset(); hrvLatch.reset();
   ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity; tierSeen = 'rate';
   plate = null; pair = null; replayText = null;
   $('ledger-log').replaceChildren();
@@ -254,13 +276,19 @@ function onSource(e: SourceEvent): void {
   if (p.pulseRate) {
     beats.setRate(p.pulseRate.bpm);
     pulse = { bpm: p.pulseRate.bpm, confidence: p.pulseRate.confidence, ready: p.pulseRate.stable || p.pulseRate.confidence >= 40 };
+    pulseLatch.update(pulse.ready, Date.now() / 1000);
   }
   if (p.breathTrace) breath.push(p.breathTrace);
   if (p.breathRate) {
     breath.setRate(p.breathRate.rpm, p.breathRate.stable);
     breathRate = { rpm: p.breathRate.rpm, ready: p.breathRate.stable };
+    breathLatch.update(breathRate.ready, Date.now() / 1000);
   }
-  if (p.hrv) hrv = { rmssd: p.hrv.rmssd, sdnn: p.hrv.sdnn, ready: p.hrv.stable };
+  if (p.hrv) {
+    // The seal and verso use HRV only from a stable packet; the gate uses the latch.
+    if (p.hrv.stable || !hrv?.ready) hrv = { rmssd: p.hrv.rmssd, sdnn: p.hrv.sdnn, ready: p.hrv.stable };
+    hrvLatch.update(p.hrv.stable, Date.now() / 1000);
+  }
   if (p.talking?.length) {
     talking = p.talking[p.talking.length - 1].detected;
 
@@ -274,7 +302,8 @@ function onSource(e: SourceEvent): void {
   const wall = Date.now() / 1000;
   if (p.blinking?.length) {
     const now = p.blinking.some((b) => b.detected);
-    if (now && !blinking && wall - lastBlinkAt > 0.4) onBlink(wall);
+    // The blink flag can drop for a frame mid-blink; 0.8 s keeps one blink one entry.
+    if (now && !blinking && wall - lastBlinkAt > 0.8) onBlink(wall);
     blinking = now;
   }
   if (p.smile) {
@@ -307,9 +336,9 @@ function frame(dt: number): void {
   const wall = Date.now() / 1000;
   const stage: Stage = sitting.tick(dt, {
     readiness, talking, windowFocused: focused, running,
-    pulseReady: !!pulse?.ready && beats.tier(wall) != null,
-    breathReady: !!breathRate?.ready,
-    hrvReady: !!hrv?.ready,
+    pulseReady: pulseLatch.ready(wall) && beats.tier(wall) != null,
+    breathReady: breathLatch.ready(wall),
+    hrvReady: hrvLatch.ready(wall),
   });
 
   // Freeze the breath only for sustained talking (the lens is capped for it), not for flicker.
