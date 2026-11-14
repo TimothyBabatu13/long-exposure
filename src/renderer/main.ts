@@ -2,6 +2,7 @@
 import type { Plate, Point, Readiness, SourceEvent, LedgerEntry, BeatTier, HeadStyle } from '../shared/types';
 import { BeatTracker, flushEnvelope } from './signal/beats';
 import { BreathTracker } from './signal/breath';
+import { ReadyLatch } from './signal/latch';
 import { LiveSource, ReplaySource, SyntheticSource, type SignalSource } from './signal/sources';
 import { Sitting, pauseCopy, type Stage } from './sitting/machine';
 import { PlateRenderer, type FrameState } from './render/plate';
@@ -117,6 +118,8 @@ let renderer: PlateRenderer | null = null;
 const beats = new BeatTracker();
 const breath = new BreathTracker();
 const heart = new Heartbeat();
+/** Stage gates: each signal counts as ready for a while after the SDK last marked it stable. */
+const pulseLatch = new ReadyLatch(), breathLatch = new ReadyLatch(), hrvLatch = new ReadyLatch();
 let raf = 0;
 let netCount = 0;
 let focused = true;
@@ -158,6 +161,7 @@ function resetSitting(): void {
   pulse = null; breathRate = null; hrv = null; face = null; faceSum = null; faceN = 0;
   rawFace = null; rawAt = 0; reachX = 0; reachY = 0;
   pulseScale.reset(); breathScale.reset();
+  pulseLatch.reset(); breathLatch.reset(); hrvLatch.reset();
   ghosts = []; smile = null; smileSince = null; blinkTimes = []; lastSince = Infinity; tierSeen = 'rate';
   plate = null; pair = null; replayText = null;
   $('ledger-log').replaceChildren();
@@ -254,13 +258,19 @@ function onSource(e: SourceEvent): void {
   if (p.pulseRate) {
     beats.setRate(p.pulseRate.bpm);
     pulse = { bpm: p.pulseRate.bpm, confidence: p.pulseRate.confidence, ready: p.pulseRate.stable || p.pulseRate.confidence >= 40 };
+    pulseLatch.update(pulse.ready, Date.now() / 1000);
   }
   if (p.breathTrace) breath.push(p.breathTrace);
   if (p.breathRate) {
     breath.setRate(p.breathRate.rpm, p.breathRate.stable);
     breathRate = { rpm: p.breathRate.rpm, ready: p.breathRate.stable };
+    breathLatch.update(breathRate.ready, Date.now() / 1000);
   }
-  if (p.hrv) hrv = { rmssd: p.hrv.rmssd, sdnn: p.hrv.sdnn, ready: p.hrv.stable };
+  if (p.hrv) {
+    // The seal and verso use HRV only from a stable packet; the gate uses the latch.
+    if (p.hrv.stable || !hrv?.ready) hrv = { rmssd: p.hrv.rmssd, sdnn: p.hrv.sdnn, ready: p.hrv.stable };
+    hrvLatch.update(p.hrv.stable, Date.now() / 1000);
+  }
   if (p.talking?.length) {
     talking = p.talking[p.talking.length - 1].detected;
 
@@ -307,9 +317,9 @@ function frame(dt: number): void {
   const wall = Date.now() / 1000;
   const stage: Stage = sitting.tick(dt, {
     readiness, talking, windowFocused: focused, running,
-    pulseReady: !!pulse?.ready && beats.tier(wall) != null,
-    breathReady: !!breathRate?.ready,
-    hrvReady: !!hrv?.ready,
+    pulseReady: pulseLatch.ready(wall) && beats.tier(wall) != null,
+    breathReady: breathLatch.ready(wall),
+    hrvReady: hrvLatch.ready(wall),
   });
 
   // Freeze the breath only for sustained talking (the lens is capped for it), not for flicker.
