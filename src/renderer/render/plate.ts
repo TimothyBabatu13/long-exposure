@@ -7,7 +7,7 @@
 import type { HeadStyle, Point, SealParams } from '../../shared/types';
 import {
   CONTOURS, FACE_OVAL, RIGHT_EYE, LEFT_EYE, LIPS_INNER, LIPS_OUTER, RIGHT_IRIS, LEFT_IRIS,
-  RIGHT_BROW, LEFT_BROW, NOSE_BASE, FOREHEAD, CHIN, NOSE_TIP,
+  RIGHT_BROW, LEFT_BROW, NOSE_BASE, NOSE_BRIDGE, FOREHEAD, CHIN, NOSE_TIP,
 } from './landmarks';
 import { drawSeal } from './seal';
 
@@ -35,6 +35,14 @@ export interface FrameState {
   /** Top of the head; 'soft' when omitted. */
   head?: HeadStyle;
 }
+
+/** Upper lip: outer contour from corner to corner over the top, back along the inner top. */
+const UPPER_LIP = [61, 185, 40, 39, 37, 0, 267, 269, 270, 409, 291, 308, 415, 310, 311, 312, 13, 82, 81, 80, 191, 78];
+/** The jawline from ear to ear under the chin. */
+const JAWLINE = [361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132];
+/** Upper eyelids, outer corner to inner corner. */
+const RIGHT_UPPER_LID = [33, 246, 161, 160, 159, 158, 157, 173, 133];
+const LEFT_UPPER_LID = [263, 466, 388, 387, 386, 385, 384, 398, 362];
 
 /** The mask and light layers are drawn at 1/SOFT size (see the constructor). */
 const SOFT = 4;
@@ -92,7 +100,7 @@ void main() {
 
   // Tone, 0 dark .. 1 light: studio background, coat, crown, lit face.
   float bg = 0.56 + 0.16 * (1.0 - smoothstep(0.0, 0.55, length(c - vec2(0.0, -0.06)))); // soft halo behind the head
-  float faceTone = 0.28 + 0.6 * lambert - mask.g * 0.32 + lightL.r * 0.14;
+  float faceTone = 0.2 + 0.62 * lambert - mask.g * 0.38 + lightL.r * 0.16;
   float tone = bg;
   tone = mix(tone, 0.16 + 0.12 * (1.0 - uv.y), coat);
   tone = mix(tone, uCrownTone, crown * (1.0 - face));
@@ -120,9 +128,9 @@ void main() {
   float faceV = clamp((uv.y - uFaceTop) / max(0.01, uFaceBottom - uFaceTop), 0.0, 1.0);
   float band = exp(-pow(faceV - uTravel, 2.0) / 0.09);
   float flushAmt = uFlush * smoothstep(0.05, 0.5, face) * (0.3 + 0.7 * band) * mix(1.0, 0.7, uGentle);
-  // Warm rose over the whole face (the plate is otherwise silver-grey, so a hue
-  // shift reads clearly on video), brightest where the wave is.
-  vec3 flushed = image * vec3(1.24, 0.9, 0.84) + vec3(0.08, 0.02, 0.0);
+  // The pulse is mostly light, with only a hint of warmth: a brightening that
+  // reads on any skin tone and on a silver plate, rather than "rosy cheeks".
+  vec3 flushed = image * vec3(1.24, 1.14, 1.06) + vec3(0.06, 0.045, 0.025);
   image = mix(image, flushed, flushAmt);
 
   // Bare plate (before development): cool silver, tarnish creeping from the edge.
@@ -231,7 +239,7 @@ export class PlateRenderer {
       mask.fillStyle = 'rgb(255,0,0)';
       polygon(mask, (f.topologyOk ? FACE_OVAL : hullIdx(f.face)).map(P), true);
       mask.fill();
-      if (f.topologyOk) this.drawFeatures(mask, light, P);
+      if (f.topologyOk) { this.drawFeatures(mask, light, P); this.drawLikeness(mask, light, ink, P); }
       mask.filter = 'none';
 
       // Ink: light engraved contours, irises with a catchlight, sparse stipple.
@@ -239,8 +247,10 @@ export class PlateRenderer {
       if (f.topologyOk) {
         for (const c of CONTOURS) {
           if (c.idx === LIPS_INNER) continue; // drawn below as the closed lip line
-          const faint = c.idx === FACE_OVAL || c.idx === LIPS_OUTER;
-          ink.strokeStyle = faint ? 'rgba(20,14,8,0.2)' : 'rgba(20,14,8,0.55)';
+          // Nose and face outline are shown by tone (see drawLikeness); a drawn line
+          // there reads as a cartoon, so they stay faint.
+          const faint = c.idx === FACE_OVAL || c.idx === LIPS_OUTER || c.idx === NOSE_BRIDGE || c.idx === NOSE_BASE;
+          ink.strokeStyle = faint ? 'rgba(20,14,8,0.12)' : 'rgba(20,14,8,0.55)';
           ink.lineWidth = c.weight * (s / 760);
           polygon(ink, c.idx.map(P), c.closed);
           ink.stroke();
@@ -324,6 +334,62 @@ export class PlateRenderer {
     blob(light, P(10).x - faceW * 0.06, P(10).y + faceW * 0.14, faceW * 0.22, faceW * 0.09, 'rgb(160,0,0)'); // forehead
     blob(light, P(116).x, P(116).y + faceW * 0.03, faceW * 0.06, faceW * 0.035, 'rgb(80,0,0)'); // lit cheekbone
     light.filter = 'none';
+  }
+
+  /**
+   * What makes the plate look like this sitter rather than anyone: tone and
+   * line taken from their own landmarks. Lips are toned by their real outline
+   * (upper lip darker, a highlight on the lower), the nose gets a shadow down
+   * its far side and nostrils where the sitter's are, the brows are filled at
+   * their real thickness, the upper eyelid is drawn as a line, and the jaw
+   * casts a shadow that follows the sitter's jawline.
+   */
+  private drawLikeness(mask: CanvasRenderingContext2D, light: CanvasRenderingContext2D, ink: CanvasRenderingContext2D, P: (i: number) => Point): void {
+    const s = this.size;
+    const faceW = Math.abs(P(454).x - P(234).x);
+    const path = (ctx: CanvasRenderingContext2D, idx: number[], closed: boolean, dx = 0, dy = 0) => {
+      ctx.beginPath();
+      idx.forEach((i, k) => { const q = P(i); if (k === 0) ctx.moveTo(q.x + dx, q.y + dy); else ctx.lineTo(q.x + dx, q.y + dy); });
+      if (closed) ctx.closePath();
+    };
+    // Light comes from the upper left of the plate; the far side is the right.
+    const farSign = P(358).x > P(129).x ? 1 : -1;
+
+    mask.globalCompositeOperation = 'lighter';
+    mask.filter = `blur(${(s * 0.004 / SOFT).toFixed(1)}px)`;
+    // Lips: the sitter's own outline, upper lip in shadow.
+    mask.fillStyle = 'rgb(0,70,0)'; path(mask, LIPS_OUTER, true); mask.fill();
+    mask.fillStyle = 'rgb(0,60,0)'; path(mask, UPPER_LIP, true); mask.fill();
+    // Nose: a shadow down the far side of the bridge to the nostril wing.
+    mask.filter = `blur(${(s * 0.008 / SOFT).toFixed(1)}px)`;
+    mask.strokeStyle = 'rgb(0,150,0)'; mask.lineWidth = faceW * 0.07; mask.lineCap = 'round';
+    path(mask, [168, 6, 197, 195, 5], false, farSign * faceW * 0.05, 0); mask.stroke();
+    // Jaw: the shadow under the sitter's jawline onto the neck.
+    mask.filter = `blur(${(s * 0.012 / SOFT).toFixed(1)}px)`;
+    mask.strokeStyle = 'rgb(0,120,0)'; mask.lineWidth = faceW * 0.09;
+    path(mask, JAWLINE, false, 0, faceW * 0.05); mask.stroke();
+    mask.globalCompositeOperation = 'source-over';
+    mask.filter = 'none';
+
+    // A highlight on the lower lip.
+    const lo = P(17), li = P(14);
+    light.filter = `blur(${(s * 0.004 / SOFT).toFixed(1)}px)`;
+    light.fillStyle = 'rgb(120,0,0)';
+    light.beginPath(); light.ellipse((lo.x + li.x) / 2 - faceW * 0.02, (lo.y + li.y) / 2, faceW * 0.07, faceW * 0.015, 0, 0, Math.PI * 2); light.fill();
+    light.filter = 'none';
+
+    // Ink: brows at their real thickness, the upper eyelids, the nostrils.
+    ink.filter = `blur(${(s / 600).toFixed(1)}px)`;
+    ink.fillStyle = 'rgba(25,18,10,0.34)';
+    for (const brow of [RIGHT_BROW, LEFT_BROW]) { path(ink, brow, true); ink.fill(); }
+    ink.filter = 'none';
+    ink.strokeStyle = 'rgba(20,14,8,0.8)'; ink.lineWidth = 2.2 * (s / 760); ink.lineCap = 'round';
+    for (const lid of [RIGHT_UPPER_LID, LEFT_UPPER_LID]) { path(ink, lid, false); ink.stroke(); }
+    ink.fillStyle = 'rgba(20,14,8,0.5)';
+    for (const [a, b] of [[98, 2], [2, 327]] as const) {
+      const qa = P(a), qb = P(b);
+      ink.beginPath(); ink.ellipse((qa.x + qb.x) / 2, (qa.y + qb.y) / 2 - faceW * 0.008, faceW * 0.022, faceW * 0.011, 0, 0, Math.PI * 2); ink.fill();
+    }
   }
 
   /**
