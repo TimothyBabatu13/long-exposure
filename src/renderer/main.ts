@@ -27,16 +27,29 @@ const bridge = !isWeb && typeof (window.studio as { config?: unknown } | undefin
 // ---------------------------------------------------------------------------
 let config = { hasApiKey: false, telemetry: false, record: false, version: 'web' };
 let replayText: string | null = null;
+/** Without a live camera, the recorded sitting is the main action. */
+let samplePrimary = false;
+
+/** Make "Watch a real sitting" the primary button; "I agree to sit" then runs the synthetic sitting. */
+function preferSample(): void {
+  samplePrimary = true;
+  const sit = $('btn-sit'), sample = $('btn-sample');
+  sit.classList.replace('primary', 'secondary');
+  sample.classList.replace('secondary', 'primary');
+  sample.innerHTML = 'Watch a real sitting <kbd>Enter</kbd>';
+  sit.textContent = 'Try a synthetic sitting';
+  sample.after(sit);
+}
 
 async function init(): Promise<void> {
   if (bridge) config = { ...config, ...(await bridge.config()) };
   const banner = $('source-banner');
   if (isWeb || !bridge) {
-    banner.textContent = 'Web demo: no camera is used. "Watch a real sitting" plays back a real 90-second sitting recorded with the SmartSpectra SDK; "I agree to sit" runs a SYNTHETIC one. Install the app for a live sitting.';
-    banner.classList.add('warn');
+    banner.textContent = 'Web demo, no camera: "Watch a real sitting" plays back a real sitting recorded live with the SmartSpectra SDK (its signals and face landmarks, no video). A live sitting needs the desktop app and an API key.';
+    preferSample();
   } else if (!config.hasApiKey) {
-    banner.textContent = 'No SmartSpectra API key found (SMARTSPECTRA_API_KEY). "Watch a real sitting" plays back a real recorded sitting; "I agree to sit" runs a SYNTHETIC demo. See README for setup.';
-    banner.classList.add('warn');
+    banner.textContent = 'No API key set, so no live sitting: "Watch a real sitting" plays back a real sitting recorded with the SmartSpectra SDK. Add SMARTSPECTRA_API_KEY for a live sitting (see README).';
+    preferSample();
   } else {
     banner.textContent = `Live sitting: SmartSpectra SDK on this device's camera. Telemetry ${config.telemetry ? 'ON (you opted in)' : 'off'}.`;
   }
@@ -50,7 +63,10 @@ async function init(): Promise<void> {
 
   $('btn-sit').addEventListener('click', () => void begin());
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && $('welcome').classList.contains('active')) void begin();
+    // Enter takes the primary action: a live sitting, or the recorded one without a key.
+    if (e.key === 'Enter' && $('welcome').classList.contains('active') && document.activeElement?.tagName !== 'INPUT') {
+      if (samplePrimary) $('btn-sample').click(); else void begin();
+    }
   });
   // A real sitting recorded with the SDK, bundled for anyone without a key or
   // camera. It holds signals and face geometry only, never frames.

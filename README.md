@@ -105,7 +105,7 @@ With `--out` it writes the decoded metrics as NDJSON, with no frames.
 
 ### Replays
 
-Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save session recording** button. It saves every received signal (no frames) as `.ndjson`. **Play a recorded sitting** on the welcome screen plays it back, labelled **REPLAY**.
+Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save session recording** button. It saves every received signal (no frames) as `.ndjson`. **Load a recording file…** on the welcome screen plays it back, labelled **REPLAY**.
 
 **Watch a real sitting** plays a recording that ships with the app ([`src/renderer/public/sample-sitting.ndjson`](src/renderer/public/sample-sitting.ndjson)): one of the author's own live sittings on Windows, published with consent. It holds the SDK's signals and face landmarks only, no frames. It was trimmed with `node scripts/make-sample.mjs <recording> <out> [endSeconds]`, which skips the SDK's start-up wait, keeps every second set of landmarks rounded to 0.1 px, and ends shortly after the plate develops. Judges without a key, and the web demo, use it to see a real sitting.
 
