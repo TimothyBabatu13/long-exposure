@@ -52,8 +52,14 @@ export function bindStudioSdk(win: BrowserWindow, apiKey: string, telemetry: boo
     // Accumulated output is not requested: the SDK sends it only when a session
     // ends, too late for a 60-second plate.
     sdk = s;
-    s.useCamera(CameraSelection.default); // the spike's camera setup: SDK defaults
-    s.start();
+    try {
+      s.useCamera(CameraSelection.default); // the spike's camera setup: SDK defaults
+      s.start();
+    } catch (err) {
+      // Release the session (and the camera) before reporting the failure.
+      await stop();
+      throw err;
+    }
   });
 
   ipcMain.handle('studio:sdk:stop', () => stop());
