@@ -141,7 +141,9 @@ if (process.env.LE_SMOKE_DIR) {
     win.webContents.once('did-finish-load', async () => {
       const wait = (s: number) => new Promise((r) => setTimeout(r, s * 1000));
       await wait(1.5); await shot('1-welcome');
-      await win.webContents.executeJavaScript("document.getElementById('btn-sit').click()");
+      // LE_SMOKE_SAMPLE=1 runs the bundled real recording instead of the synthetic sitting.
+      const button = process.env.LE_SMOKE_SAMPLE ? 'btn-sample' : 'btn-sit';
+      await win.webContents.executeJavaScript(`document.getElementById('${button}').click()`);
       await wait(6); await shot('2-focusing');
       await wait(14); await shot('3-heart');
       await wait(16); await shot('4-breath');

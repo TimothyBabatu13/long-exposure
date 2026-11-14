@@ -28,10 +28,10 @@ async function init(): Promise<void> {
   if (bridge) config = { ...config, ...(await bridge.config()) };
   const banner = $('source-banner');
   if (isWeb || !bridge) {
-    banner.textContent = 'Web demo: no camera is used. You will watch a SYNTHETIC sitting, or a recorded one you load. Install the app for a live sitting.';
+    banner.textContent = 'Web demo: no camera is used. "Watch a real sitting" plays back a real 90-second sitting recorded with the SmartSpectra SDK; "I agree to sit" runs a SYNTHETIC one. Install the app for a live sitting.';
     banner.classList.add('warn');
   } else if (!config.hasApiKey) {
-    banner.textContent = 'No SmartSpectra API key found (SMARTSPECTRA_API_KEY). The studio will run a SYNTHETIC demo sitting. See README for setup.';
+    banner.textContent = 'No SmartSpectra API key found (SMARTSPECTRA_API_KEY). "Watch a real sitting" plays back a real recorded sitting; "I agree to sit" runs a SYNTHETIC demo. See README for setup.';
     banner.classList.add('warn');
   } else {
     banner.textContent = `Live sitting: SmartSpectra SDK on this device's camera. Telemetry ${config.telemetry ? 'ON (you opted in)' : 'off'}.`;
@@ -47,6 +47,16 @@ async function init(): Promise<void> {
   $('btn-sit').addEventListener('click', () => void begin());
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && $('welcome').classList.contains('active')) void begin();
+  });
+  // A real sitting recorded with the SDK, bundled for anyone without a key or
+  // camera. It holds signals and face geometry only, never frames.
+  $('btn-sample').addEventListener('click', async () => {
+    try {
+      replayText = await loadBundled('sample-sitting.ndjson');
+      void begin();
+    } catch {
+      toast('The recorded sitting could not be loaded.');
+    }
   });
   $<HTMLInputElement>('replay-file').addEventListener('change', async (e) => {
     const f = (e.target as HTMLInputElement).files?.[0];
@@ -601,3 +611,16 @@ async function leaveStudio(): Promise<void> {
 }
 
 void init();
+
+/** Reads a file shipped with the app: fetch on the web, XHR for the packaged app's file:// page. */
+function loadBundled(name: string): Promise<string> {
+  const url = new URL(name, location.href).href;
+  if (!url.startsWith('file:')) return fetch(url).then((r) => { if (!r.ok) throw new Error(String(r.status)); return r.text(); });
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open('GET', url);
+    x.onload = () => (x.status === 0 || x.status === 200 ? resolve(x.responseText) : reject(new Error(String(x.status))));
+    x.onerror = () => reject(new Error('load failed'));
+    x.send();
+  });
+}

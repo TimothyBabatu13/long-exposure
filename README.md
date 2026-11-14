@@ -2,6 +2,8 @@
 
 **A 60-second living daguerreotype.** You sit for a portrait, as people did in 1840. The plate develops while you hold still, and the finished portrait flushes with your real heartbeat and breathes with your own recorded breaths. No photograph of you is taken or kept.
 
+**Try it in your browser, no install or key:** [timothybabatu13.github.io/long-exposure](https://timothybabatu13.github.io/long-exposure/). Press **Watch a real sitting** to play back a real 90-second sitting recorded with the SDK.
+
 Built for the [DEV Presage SmartSpectra SDK Challenge](https://dev.to/challenges/presage-2026-11-04) with [`@smartspectra/node-sdk`](https://www.npmjs.com/package/@smartspectra/node-sdk).
 
 > In 1840 a portrait took a minute. You had to hold still. Your heart couldn't.
@@ -103,7 +105,9 @@ With `--out` it writes the decoded metrics as NDJSON, with no frames.
 
 ### Replays
 
-Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save session recording** button. It saves every received signal (no frames) as `.ndjson`. **Play a recorded sitting** on the welcome screen plays it back, labelled **REPLAY**. This lets judges without a key, or the web build, see a real sitting.
+Set `SMARTSPECTRA_RECORD=1` in `.env` and the result screen gains a **Save session recording** button. It saves every received signal (no frames) as `.ndjson`. **Play a recorded sitting** on the welcome screen plays it back, labelled **REPLAY**.
+
+**Watch a real sitting** plays a recording that ships with the app ([`src/renderer/public/sample-sitting.ndjson`](src/renderer/public/sample-sitting.ndjson)): one of the author's own live sittings on Windows, published with consent. It holds the SDK's signals and face landmarks only, no frames. It was trimmed with `node scripts/make-sample.mjs <recording> <out> [endSeconds]`, which skips the SDK's start-up wait, keeps every second set of landmarks rounded to 0.1 px, and ends shortly after the plate develops. Judges without a key, and the web demo, use it to see a real sitting.
 
 A recording can also be replayed through the sitting logic in a test, which prints the stage ledger, the breathing motion and the result:
 
