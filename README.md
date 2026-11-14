@@ -193,7 +193,7 @@ The full statement is in **[docs/PRIVACY.md](docs/PRIVACY.md)**. In short:
   - A strict CSP is in place, and the main process blocks and logs any request from the page.
   - The Studio Ledger shows the count.
 - **Presage telemetry is off by default** (`enableTelemetry: false`); opt in with `SMARTSPECTRA_TELEMETRY=1`.
-- **The SDK itself contacts Presage** to check the API key and meter usage. The audit table in PRIVACY.md records what it sends.
+- **The SDK itself contacts Presage** to check the API key and meter usage. In our audit (telemetry off) that was the only outside traffic: one host, `cont-api.physiology.presagetech.com`, over HTTPS (see PRIVACY.md).
 - **No AI service.** The stress index and the negative-emotion scores are deliberately unused.
 - **Not a medical device.** This is portraiture, with no health claims.
 
@@ -228,7 +228,7 @@ Live sittings with the SDK on a real camera (Windows, 4-core laptop) complete en
 - [x] The native camera path holds the frame rate (no more code 14)
 - [x] The landmark topology matches the 478-point face mesh
 - [x] Beat timing tier: replaying the two recorded live sittings, the pulse waveform arrived too late for `waveform` timing; one sitting ran on `predicted` and the other on `rate` (see Beat timing tiers below)
-- [ ] Network audit of SDK traffic (docs/PRIVACY.md)
+- [x] Network audit of SDK traffic: with telemetry off, the only outside host contacted was `cont-api.physiology.presagetech.com` (HTTPS), at start-up and for the periodic usage check; the page made no requests (docs/PRIVACY.md)
 - [ ] Tested in poor light, with glasses, and across skin tones (camera pulse readings are weaker on darker skin and in low light)
 
 ## Credits and licence
