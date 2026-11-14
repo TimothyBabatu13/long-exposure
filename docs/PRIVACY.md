@@ -49,19 +49,23 @@ There is no account, no cloud storage, no analytics, and no crash reporting.
 - **Presage telemetry is OFF by default** (`enableTelemetry: false`). A sitter can opt in with `SMARTSPECTRA_TELEMETRY=1`. According to Presage, telemetry contains session summaries and device-readiness reports, and never raw frames or measured vitals. See [Presage's telemetry and privacy notes](https://smartspectra.presagetech.com/docs/telemetry-and-privacy).
 - **No AI service** is used by the app.
 
-### Audit it yourself
+### Audit (2026-11-14, Windows 11, telemetry off)
 
-The "0 bytes sent by this app" claim covers the app. To see what the SDK sends:
+Method: during a live session (the SDK running on the camera for about five minutes, then the app left open), every TCP connection owned by the app's processes was sampled twice a second with `Get-NetTCPConnection`. Remote addresses were matched to hostnames with DNS. Only addresses, ports and timing were recorded, never content (the traffic is TLS-encrypted).
 
-1. **Windows:** open Resource Monitor, go to the Network tab, and filter for `Long Exposure.exe` / `electron.exe` during a sitting.
-   **macOS:** run `nettop -p <pid>`, or use Little Snitch.
-2. Note the destination hosts and the byte counts with telemetry off, then again with it on.
-3. Record the result in the table below before publishing the submission.
+| Time into the session | Process | Host | Port | What it is |
+|---|---|---|---|---|
+| 23-30 s | main (SDK) | `cont-api.physiology.presagetech.com` (AWS Global Accelerator: 15.197.69.23, 76.223.65.59) | 443 (HTTPS) | SDK start-up: API key check and the model download |
+| 252 s | main (SDK) | `cont-api.physiology.presagetech.com` | 443 (HTTPS) | The SDK's periodic usage check |
 
-| Date | Telemetry | Hosts contacted | Approx. bytes out per 60 s sitting |
-|---|---|---|---|
-| _to fill in on day 1_ | off | | |
-| _to fill in on day 1_ | on | | |
+Findings:
+
+- **Every outside connection went to one Presage host**, from the main process, where the SDK runs. No other host was contacted.
+- **The page made no network requests.** The Studio Ledger's count stayed at 0, and the main process blocks any it would make.
+- **Telemetry was off**, so no telemetry traffic is expected or was seen.
+- **Limits of this audit.** It records which hosts were contacted, not how many bytes or what was sent: the content is encrypted and belongs to the SDK. A connection shorter than the half-second sampling interval could be missed. The telemetry-on case was not tested.
+
+To repeat it: on Windows, Resource Monitor's Network tab filtered to `electron.exe` / `Long Exposure.exe` shows the same hosts and also byte counts; on macOS, `nettop -p <pid>` or Little Snitch.
 
 ## Not a medical device
 
