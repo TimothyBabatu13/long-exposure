@@ -54,8 +54,19 @@ export const UNCAP_DELAY_S = 0.3;
  * all flagged spells were under 0.3 s. A spoken word or sentence lasts longer.
  */
 export const TALK_CAP_DELAY_S = 1.5;
-/** Pauses that cap at once: privacy (window left, second face) and start-up. */
-const IMMEDIATE_PAUSES: ReadonlySet<PauseReason> = new Set(['away', 'crowd', 'starting']);
+/**
+ * The chest and face-position hints matter only for the breathing (the pulse is
+ * read from the face), so before the breath stage they are advice, and during
+ * it they pause the clock only after this long.
+ */
+export const SOFT_CAP_DELAY_S = 2.5;
+/**
+ * Leaving the studio window caps the lens after this grace: a notification or a
+ * screen recorder taking focus for a moment should not spoil a sitting.
+ */
+export const AWAY_GRACE_S = 3;
+/** Pauses that cap at once: a second face and start-up. */
+const IMMEDIATE_PAUSES: ReadonlySet<PauseReason> = new Set(['crowd', 'starting']);
 
 export class Sitting {
   stage: Stage = 'focusing';
@@ -89,6 +100,10 @@ export class Sitting {
       case 'motion': return 'motion';
       case 'too-dark': case 'too-bright': return 'lighting';
       case 'framing': return 'framing';
+      case 'chest': case 'position':
+        // Advice while the face and pulse are exposing; a pause once the breath is.
+        if (this.stage === 'breath') return 'framing';
+        break;
       case 'multiple-faces': return 'crowd';
       default: break;
     }
@@ -137,7 +152,9 @@ export class Sitting {
     } else {
       if (raw === this.pending) this.pendingFor += dt;
       else { this.pending = raw; this.pendingFor = dt; }
-      const need = raw == null ? UNCAP_DELAY_S : IMMEDIATE_PAUSES.has(raw) ? 0 : raw === 'talking' ? TALK_CAP_DELAY_S : CAP_DELAY_S;
+      const soft = raw === 'framing' && (i.readiness === 'chest' || i.readiness === 'position');
+      const need = raw == null ? UNCAP_DELAY_S : IMMEDIATE_PAUSES.has(raw) ? 0 : raw === 'away' ? AWAY_GRACE_S
+        : raw === 'talking' ? TALK_CAP_DELAY_S : soft ? SOFT_CAP_DELAY_S : CAP_DELAY_S;
       if (this.pendingFor >= need) {
         if (raw && raw !== 'starting') this.log(raw === 'talking' ? 'talk' : raw === 'motion' ? 'motion' : 'face', pauseText[raw]);
         else if (!raw && this.pause && this.pause !== 'starting') this.log('stage', 'still again: lens uncapped');

@@ -17,6 +17,10 @@ export type Readiness =
   | 'too-dark'
   | 'too-bright'
   | 'framing'
+  /** Chest not visible (SDK code 7): the breathing needs it; the face and pulse do not. */
+  | 'chest'
+  /** Face off-centre, too high or low, or turned (codes 3, 15, 16, 17): still readable for the pulse. */
+  | 'position'
   | 'tuning'
   | 'low-fps';
 

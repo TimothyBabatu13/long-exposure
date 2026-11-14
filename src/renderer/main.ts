@@ -393,8 +393,12 @@ function frame(dt: number): void {
 
   $('progress-fill').style.width = `${sitting.progress * 100}%`;
   // For framing problems the SDK's own hint ("chest not visible", "face too low"…) is more useful than ours.
+  // A chest or position hint that is only advice (before the breath stage) is
+  // shown while the clock keeps running.
+  const advice = (readiness === 'chest' || readiness === 'position') && readinessHint ? readinessHint : '';
   $('caption').textContent = sitting.pause === 'framing' && readinessHint ? readinessHint
-    : sitting.pause ? pauseCopy[sitting.pause] : stageCopy[stage];
+    : sitting.pause ? pauseCopy[sitting.pause]
+    : advice && stage !== 'developed' ? `${stageCopy[stage]} ${advice}` : stageCopy[stage];
 
   updateGuide(wall);
   const kymo = $<HTMLCanvasElement>('kymo');
@@ -615,7 +619,11 @@ function updateGuide(wall: number): void {
     const h = Math.round((canvas.width * fr.h) / fr.w);
     if (canvas.height !== h) canvas.height = h;
   }
-  const pl = fresh && fr ? placement(fresh, fr) : null;
+  let pl = fresh && fr ? placement(fresh, fr) : null;
+  // The SDK has the last word on framing: if it reports a framing problem, the
+  // guide shows the SDK's hint and never "Well placed".
+  const sdkFraming = (readiness === 'chest' || readiness === 'position' || readiness === 'framing') && readinessHint;
+  if (pl && sdkFraming) pl = { ...pl, ok: false, advice: readinessHint };
   drawGuide(canvas.getContext('2d')!, fresh, fr, pl);
   $('guide-advice').textContent = !fresh ? 'No face found yet' : pl?.ok ? 'Well placed' : pl?.advice ?? '';
   $('guide-advice').dataset.state = !fresh ? 'none' : pl?.ok ? 'ok' : 'off';
