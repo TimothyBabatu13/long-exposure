@@ -89,6 +89,8 @@ export function readinessFromCode(code: number): Readiness {
     case 10: return 'tuning';
     case 11: return 'low-fps';
     case 12: return 'motion';
-    default: return 'framing'; // not centred, too close/far/high/low, not forward, chest not visible
+    case 7: return 'chest';
+    case 3: case 15: case 16: case 17: return 'position';
+    default: return 'framing'; // face size out of range, too close or too far: these affect the pulse
   }
 }

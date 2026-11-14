@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, TALK_CAP_DELAY_S, MAX_SITTING_S, type SittingInputs } from '../src/renderer/sitting/machine';
+import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, TALK_CAP_DELAY_S, MAX_SITTING_S, SOFT_CAP_DELAY_S, AWAY_GRACE_S, type SittingInputs } from '../src/renderer/sitting/machine';
 
 const still: SittingInputs = {
   readiness: 'ok', talking: false, windowFocused: true, running: true,
@@ -48,16 +48,16 @@ describe('Sitting', () => {
     expect(s.exposure).toBeGreaterThan(12);
   });
 
-  it('caps at once when the window is left', () => {
+  it('caps once the window has been left for AWAY_GRACE_S', () => {
     const s = new Sitting();
     run(s, 5);
-    s.tick(0.1, { ...still, windowFocused: false });
+    run(s, AWAY_GRACE_S + 0.2, { windowFocused: false });
     expect(s.pause).toBe('away');
   });
 
-  it('pauses when the window loses focus (no background sensing)', () => {
+  it('never starts exposing while the window is in the background (no background sensing)', () => {
     const s = new Sitting();
-    run(s, 2, { windowFocused: false });
+    run(s, 10, { windowFocused: false });
     expect(s.pause).toBe('away');
     expect(s.exposure).toBe(0);
   });
@@ -164,5 +164,47 @@ describe('sitting limits', () => {
     for (let t = 0; t < 4; t += 0.5) s.tick(0.5, { ...still, readiness: 'too-dark' });
     expect(s.stage).toBe('developed');
     expect(s.underexposed).toBe(true);
+  });
+});
+
+describe('soft framing hints', () => {
+  it('a hidden chest does not stop the face and heart stages', () => {
+    const s = new Sitting();
+    run(s, 20, { readiness: 'chest' });
+    expect(s.pause).toBeNull();
+    expect(s.exposure).toBeGreaterThan(19);
+    expect(s.stage).toBe('heart');
+  });
+
+  it('face position hints are advice before the breath stage', () => {
+    const s = new Sitting();
+    run(s, 15, { readiness: 'position' });
+    expect(s.pause).toBeNull();
+  });
+
+  it('a hidden chest pauses the breath stage, but only after SOFT_CAP_DELAY_S', () => {
+    const s = new Sitting();
+    run(s, 35);
+    expect(s.stage).toBe('breath');
+    run(s, SOFT_CAP_DELAY_S - 0.5, { readiness: 'chest' });
+    expect(s.pause).toBeNull();
+    run(s, 1, { readiness: 'chest' });
+    expect(s.pause).toBe('framing');
+  });
+
+  it('a face too far still pauses at once', () => {
+    const s = new Sitting();
+    run(s, 10);
+    run(s, CAP_DELAY_S + 0.2, { readiness: 'framing' });
+    expect(s.pause).toBe('framing');
+  });
+
+  it('leaving the window caps only after a short grace', () => {
+    const s = new Sitting();
+    run(s, 10);
+    run(s, AWAY_GRACE_S - 0.5, { windowFocused: false });
+    expect(s.pause).toBeNull();
+    run(s, 1, { windowFocused: false });
+    expect(s.pause).toBe('away');
   });
 });
