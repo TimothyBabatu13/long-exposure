@@ -36,6 +36,9 @@ export interface FrameState {
   head?: HeadStyle;
 }
 
+/** The mask and light layers are drawn at 1/SOFT size (see the constructor). */
+const SOFT = 4;
+
 const VERT = `#version 300 es
 in vec2 aPos; out vec2 vUv;
 void main() { vUv = aPos * 0.5 + 0.5; gl_Position = vec4(aPos, 0.0, 1.0); }`;
@@ -62,29 +65,36 @@ float engrave(float coord, float dark) {
   return 1.0 - smoothstep(w - 0.06, w + 0.02, abs(fract(coord) - 0.5) * 1.0 + 0.0);
 }
 
+// A soft read of a mask: the canvas blur of large shapes comes out blocky in
+// some browsers, so masks are read from a smaller mip level (about 6 px of
+// smoothing at a 720 px plate) before any thresholding.
+vec4 soft(sampler2D t, vec2 uv) { return texture(t, uv); }
+
 void main() {
   vec2 uv = vec2(vUv.x, 1.0 - vUv.y);
   vec2 c = uv - vec2(0.5, 0.49);
   // The oval window of the brass mat.
   float e = length(c / vec2(0.405, 0.465));
 
-  vec4 mask = texture(uMask, uv);
-  vec4 lightL = texture(uLight, uv);
+  vec4 mask = soft(uMask, uv);
+  vec4 lightL = soft(uLight, uv);
   vec4 ink = texture(uInk, uv);
   float face = mask.r, coat = mask.b, crown = lightL.g;
 
   // Surface direction from the slope of the face height; light from the upper left.
-  float px = 3.0 / uSize;
-  float hx = texture(uMask, uv + vec2(px, 0.0)).r - texture(uMask, uv - vec2(px, 0.0)).r;
-  float hy = texture(uMask, uv + vec2(0.0, px)).r - texture(uMask, uv - vec2(0.0, px)).r;
-  vec3 n = normalize(vec3(-hx * 6.5, -hy * 6.5, 1.0));
+  // Measured over a wide step and two scales: the mask is 8-bit, and a narrow
+  // difference turns its quantisation into visible stair-steps.
+  float px = 8.0 / uSize, lod = 0.0;
+  float hx = textureLod(uMask, uv + vec2(px, 0.0), lod).r - textureLod(uMask, uv - vec2(px, 0.0), lod).r;
+  float hy = textureLod(uMask, uv + vec2(0.0, px), lod).r - textureLod(uMask, uv - vec2(0.0, px), lod).r;
+  vec3 n = normalize(vec3(-hx * 4.5, -hy * 4.5, 1.0));
   float lambert = clamp(dot(n, normalize(vec3(-0.55, -0.65, 0.75))), 0.0, 1.0);
 
   // Tone, 0 dark .. 1 light: studio background, coat, crown, lit face.
   float bg = 0.56 + 0.16 * (1.0 - smoothstep(0.0, 0.55, length(c - vec2(0.0, -0.06)))); // soft halo behind the head
   float faceTone = 0.28 + 0.6 * lambert - mask.g * 0.32 + lightL.r * 0.14;
   float tone = bg;
-  tone = mix(tone, 0.30 + 0.16 * (1.0 - uv.y), coat);
+  tone = mix(tone, 0.16 + 0.12 * (1.0 - uv.y), coat);
   tone = mix(tone, uCrownTone, crown * (1.0 - face));
   tone = mix(tone, faceTone, smoothstep(0.08, 0.6, face));
   tone = clamp(tone, 0.0, 1.0);
@@ -97,22 +107,22 @@ void main() {
   float cross = engrave((uv.x + uv.y) * uSize * 0.21, smoothstep(0.6, 0.9, dark) * 0.7 * smoothstep(0.2, 0.6, face));
   float inked = max(ink1, cross);
 
-  // Silver positive. The sitter is engraved (bright mirror between warm black
-  // lines); the studio backdrop is a smooth tone, as on real plates.
+  // Silver positive: continuous tone, as a real daguerreotype is. The
+  // engraving survives only as a faint texture over the sitter, strongest in
+  // the shadows, so the face reads as a photograph rather than as scanlines.
   vec3 silverHi = vec3(0.86, 0.84, 0.79), silverLo = vec3(0.13, 0.11, 0.09);
-  vec3 engraved = mix(silverHi * (0.82 + 0.18 * tone), silverLo, inked * 0.92);
-  vec3 smoothTone = mix(silverLo, silverHi, tone) + (fbm(uv * 3.0) - 0.5) * 0.05;
+  vec3 smoothTone = mix(silverLo, silverHi, smoothstep(0.02, 0.98, tone)) + (fbm(uv * 3.0) - 0.5) * 0.04;
   float sitter = smoothstep(0.0, 0.6, clamp(face + coat + crown, 0.0, 1.0));
-  vec3 image = mix(smoothTone, engraved, sitter);
+  vec3 image = smoothTone;
   image = mix(image, vec3(0.10, 0.08, 0.06), ink.a * 0.85);
 
   // The flush: a warm wave travelling forehead to chin with each heartbeat.
   float faceV = clamp((uv.y - uFaceTop) / max(0.01, uFaceBottom - uFaceTop), 0.0, 1.0);
   float band = exp(-pow(faceV - uTravel, 2.0) / 0.09);
-  float flushAmt = uFlush * smoothstep(0.05, 0.5, face) * (0.6 + 0.4 * band) * mix(1.0, 0.7, uGentle);
+  float flushAmt = uFlush * smoothstep(0.05, 0.5, face) * (0.3 + 0.7 * band) * mix(1.0, 0.7, uGentle);
   // Warm rose over the whole face (the plate is otherwise silver-grey, so a hue
   // shift reads clearly on video), brightest where the wave is.
-  vec3 flushed = image * vec3(1.32, 0.86, 0.78) + vec3(0.13, 0.03, 0.0);
+  vec3 flushed = image * vec3(1.24, 0.9, 0.84) + vec3(0.08, 0.02, 0.0);
   image = mix(image, flushed, flushAmt);
 
   // Bare plate (before development): cool silver, tarnish creeping from the edge.
@@ -178,7 +188,10 @@ export class PlateRenderer {
     this.inkCanvas = document.createElement('canvas');
     this.maskCanvas = document.createElement('canvas');
     this.lightCanvas = document.createElement('canvas');
-    for (const c of [this.inkCanvas, this.maskCanvas, this.lightCanvas]) { c.width = size; c.height = size; }
+    this.inkCanvas.width = size; this.inkCanvas.height = size;
+    // The soft layers are drawn small and stretched by the GPU: a small canvas
+    // blur is smooth, while a large one comes out blocky in Chromium.
+    for (const c of [this.maskCanvas, this.lightCanvas]) { c.width = Math.ceil(size / SOFT); c.height = Math.ceil(size / SOFT); }
     this.inkTex = makeTex(gl);
     this.maskTex = makeTex(gl);
     this.lightTex = makeTex(gl);
@@ -195,7 +208,16 @@ export class PlateRenderer {
     const ink = this.inkCanvas.getContext('2d')!;
     const mask = this.maskCanvas.getContext('2d')!;
     const light = this.lightCanvas.getContext('2d')!;
-    for (const c of [ink, mask, light]) c.clearRect(0, 0, s, s);
+    ink.clearRect(0, 0, s, s);
+    // The soft layers are opaque black underneath: values live in the colour
+    // channels. On a transparent canvas the faded edges are stored with low
+    // alpha, and un-premultiplying them on upload snaps them to full colour in
+    // coarse steps, which drew stair-stepped, hard-edged masks.
+    for (const c of [mask, light]) {
+      c.resetTransform(); c.globalCompositeOperation = 'source-over';
+      c.fillStyle = '#000'; c.fillRect(0, 0, c.canvas.width, c.canvas.height);
+      c.setTransform(1 / SOFT, 0, 0, 1 / SOFT, 0, 0);
+    }
 
     let faceTop = 0.2, faceBottom = 0.6;
     if (f.face) {
@@ -205,7 +227,7 @@ export class PlateRenderer {
       if (f.topologyOk) this.drawCrown(f.head === 'bare' ? mask : light, f, P);
 
       // Height: the face oval, heavily blurred, reads as a dome to the shader.
-      mask.filter = `blur(${Math.round(s * 0.028)}px)`;
+      mask.filter = `blur(${(s * 0.028 / SOFT).toFixed(1)}px)`;
       mask.fillStyle = 'rgb(255,0,0)';
       polygon(mask, (f.topologyOk ? FACE_OVAL : hullIdx(f.face)).map(P), true);
       mask.fill();
@@ -267,7 +289,7 @@ export class PlateRenderer {
     gl.uniform1f(this.u.uFaceTop, faceTop);
     gl.uniform1f(this.u.uFaceBottom, faceBottom);
     gl.uniform1f(this.u.uSize, s);
-    gl.uniform1f(this.u.uCrownTone, f.head === 'dark' ? 0.20 : 0.42);
+    gl.uniform1f(this.u.uCrownTone, f.head === 'dark' ? 0.10 : 0.30);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
@@ -283,21 +305,21 @@ export class PlateRenderer {
     };
     const faceW = Math.abs(P(454).x - P(234).x);
     mask.globalCompositeOperation = 'lighter';
-    mask.filter = `blur(${Math.round(s * 0.012)}px)`;
+    mask.filter = `blur(${(s * 0.012 / SOFT).toFixed(1)}px)`;
     for (const [eye, brow] of [[RIGHT_EYE, RIGHT_BROW], [LEFT_EYE, LEFT_BROW]] as const) {
       const ec = centre(eye), bc = centre(brow);
-      blob(mask, ec.x, (ec.y * 2 + bc.y) / 3, faceW * 0.13, faceW * 0.07, 'rgb(0,110,0)'); // socket
+      blob(mask, ec.x, (ec.y * 2 + bc.y) / 3, faceW * 0.13, faceW * 0.07, 'rgb(0,175,0)'); // socket
     }
     const nb = centre(NOSE_BASE), nt = P(NOSE_TIP);
-    blob(mask, nb.x + faceW * 0.03, nb.y + faceW * 0.03, faceW * 0.13, faceW * 0.045, 'rgb(0,120,0)'); // under the nose
+    blob(mask, nb.x + faceW * 0.03, nb.y + faceW * 0.03, faceW * 0.13, faceW * 0.045, 'rgb(0,185,0)'); // under the nose
     const lo = P(17);
-    blob(mask, lo.x, lo.y + faceW * 0.05, faceW * 0.14, faceW * 0.04, 'rgb(0,110,0)'); // under the lower lip
+    blob(mask, lo.x, lo.y + faceW * 0.05, faceW * 0.14, faceW * 0.04, 'rgb(0,150,0)'); // under the lower lip
     const chin = P(CHIN);
-    blob(mask, chin.x, chin.y + faceW * 0.06, faceW * 0.2, faceW * 0.05, 'rgb(0,90,0)'); // shadow under the chin
-    blob(mask, P(454).x - faceW * 0.08, P(454).y + faceW * 0.05, faceW * 0.1, faceW * 0.3, 'rgb(0,70,0)'); // shadow side, away from the light (upper left)
+    blob(mask, chin.x, chin.y + faceW * 0.06, faceW * 0.2, faceW * 0.05, 'rgb(0,170,0)'); // shadow under the chin
+    blob(mask, P(454).x - faceW * 0.1, P(454).y + faceW * 0.05, faceW * 0.16, faceW * 0.38, 'rgb(0,80,0)'); // shadow side, away from the light (upper left)
     mask.globalCompositeOperation = 'source-over';
 
-    light.filter = `blur(${Math.round(s * 0.012)}px)`;
+    light.filter = `blur(${(s * 0.012 / SOFT).toFixed(1)}px)`;
     blob(light, nt.x - faceW * 0.02, (P(6).y + nt.y) / 2, faceW * 0.035, faceW * 0.16, 'rgb(200,0,0)'); // nose bridge
     blob(light, P(10).x - faceW * 0.06, P(10).y + faceW * 0.14, faceW * 0.22, faceW * 0.09, 'rgb(160,0,0)'); // forehead
     blob(light, P(116).x, P(116).y + faceW * 0.03, faceW * 0.06, faceW * 0.035, 'rgb(80,0,0)'); // lit cheekbone
@@ -314,8 +336,8 @@ export class PlateRenderer {
     const top = P(FOREHEAD), l = P(234), r = P(454), chin = P(CHIN);
     const w = Math.abs(r.x - l.x), h = Math.abs(chin.y - top.y);
     const light = layer;
-    light.filter = `blur(${Math.round(s * (bare ? 0.03 : 0.045))}px)`;
-    light.fillStyle = bare ? 'rgb(200,0,0)' : 'rgb(0,130,0)';
+    light.filter = `blur(${(s * (bare ? 0.03 : 0.045) / SOFT).toFixed(1)}px)`;
+    light.fillStyle = bare ? 'rgb(210,0,0)' : 'rgb(0,255,0)';
     light.beginPath();
     if (bare) light.ellipse((l.x + r.x) / 2, top.y + h * 0.18, w * 0.47, h * 0.40, 0, Math.PI, Math.PI * 2);
     else light.ellipse((l.x + r.x) / 2, top.y + h * 0.12, w * 0.58, h * 0.42, 0, Math.PI, Math.PI * 2);
@@ -350,7 +372,7 @@ export class PlateRenderer {
     path.lineTo(cx + faceW * 1.55, s * 1.05);
     path.bezierCurveTo(cx + faceW * 1.25, shoulderY + faceW * 0.05, cx + faceW * 0.62, shoulderY, cx + neckW, shoulderY - faceW * 0.06);
     path.lineTo(cx + neckW, chin.y - faceW * 0.15);
-    mask.filter = `blur(${Math.round(s * 0.02)}px)`;
+    mask.filter = `blur(${(s * 0.02 / SOFT).toFixed(1)}px)`;
     mask.fillStyle = 'rgb(0,0,230)';
     mask.fill(path);
     mask.filter = 'none';
@@ -412,7 +434,7 @@ function link(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram 
 function makeTex(gl: WebGL2RenderingContext): WebGLTexture {
   const t = gl.createTexture()!;
   gl.bindTexture(gl.TEXTURE_2D, t);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -423,4 +445,6 @@ function upload(gl: WebGL2RenderingContext, tex: WebGLTexture, src: HTMLCanvasEl
   gl.activeTexture(gl.TEXTURE0 + unit);
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+  // Smaller, smoothed copies: the shader reads soft masks from these cheaply.
+  gl.generateMipmap(gl.TEXTURE_2D);
 }
