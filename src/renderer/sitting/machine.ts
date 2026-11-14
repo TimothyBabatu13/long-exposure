@@ -25,7 +25,7 @@ export interface SittingInputs {
 }
 
 export const STAGE_AT = { heart: 12, breath: 30, fixing: 60 } as const;
-/** If HRV never stabilises, the plate develops as "underexposed" at this point. */
+/** If a stage's signal never settles, the plate develops as "underexposed" at this exposure. */
 export const MAX_EXPOSURE_S = 120;
 const FIX_DURATION_S = 3;
 const UNDEREXPOSED_REASON = {

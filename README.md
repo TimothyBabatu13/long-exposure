@@ -26,7 +26,9 @@ Fixing starts at 60 s once the pulse is locked. The SDK's HRV usually arrives la
 The SDK works best on a still, silent, well-lit sitter, so the studio enforces exactly that:
 
 - **Talking caps the lens.** Speech spoils the breathing signal, so after 1.5 s of talking the exposure clock stops and the breathing trace holds still.
-- **Movement, leaving the frame, poor light or switching windows** also cap the lens. Short detector flickers are ignored: a cap needs 0.5 s of the same problem, and lifts after 0.3 s of a clean signal. The caption says what to fix.
+- **Movement, leaving the frame, a face too close or too far, or poor light** also cap the lens. Short detector flickers are ignored: a cap needs 0.5 s of the same problem, and lifts after 0.3 s of a clean signal. The caption says what to fix.
+- **Switching to another window** caps the lens after a 3 s grace (so a notification does not spoil a sitting).
+- **Chest not visible, or face off-centre or turned:** the pulse is read from the face, so during focusing and the heart stage these are advice in the caption and the framing guide, and the clock keeps running. During the breath stage, which needs the chest, they cap the lens after 2.5 s.
 - **A second face** caps the lens at once. If it is seen for about 2 s in total (a flickering face still adds up), the sitting ends and everything is discarded.
 - **Five-minute limit.** If the lens stays capped (poor light, framing), the sitting ends after five minutes: as an underexposed plate if some exposure was made, otherwise with nothing kept. The SDK is not left running.
 - **Blinks** leave faint doubled "ghost" eyes, like on real long-exposure plates. This can be turned off.
@@ -34,7 +36,7 @@ The SDK works best on a still, silent, well-lit sitter, so the studio enforces e
 - **Live traces** under the plate, drawn like a 19th-century kymograph (a needle scratching through soot on a turning drum): your real pulse waveform and chest trace from the SDK, scrolling as they arrive. Each lane rests flat until its signal has locked, and a held breath stays flat rather than being magnified. No numbers on the front.
 - **A framing guide** in the side panel shows the outline of your face against a dashed head-and-shoulders target, with one instruction ("Move to your left", "Move a little closer"). It is drawn from the face landmarks only, never from camera pixels, and turns green when you are well placed.
 - **Head style:** on the welcome screen, choose a soft shade (default), dark hair, or a bare head lit like skin.
-- A stage starts only when its signal is ready, never on a timer alone. "Ready" means the SDK marks the signal stable (for the pulse, a confidence of 40 or more also counts). The pulse stage then draws beats at the best timing it has (see Beat timing tiers): real peaks when the waveform allows, otherwise evenly spaced at the SDK's pulse rate. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
+- A stage starts only when its signal is ready, never on a timer alone. "Ready" means the SDK has marked the signal stable within the last 15 s (its stable flag flickers packet to packet; for the pulse, a confidence of 40 or more also counts). The pulse stage then draws beats at the best timing it has (see Beat timing tiers): real peaks when the waveform allows, otherwise evenly spaced at the SDK's pulse rate. If the signal never settles, the plate develops as **underexposed**, names the signal that was missing, and gets no seal.
 
 When the plate is developed the camera is released. The result screen runs at a lower frame rate, and the heartbeat sound fades out after a few beats (**Mute heartbeat** silences it). You can then:
 
@@ -155,7 +157,7 @@ The pulse waveform (`cardio.arterialPressureTrace`) arrives in chunks, after a d
 | `predicted` | Peaks are real but arrive late | Extended forward from the last real peak at the measured period |
 | `rate` | No clean peaks | Evenly spaced from the averaged pulse rate |
 
-The verso always prints which tier was used. The exported loop replays the sitter's actual beat-to-beat intervals from the end of the sitting.
+The verso always prints which tier was used. In the `waveform` and `predicted` tiers the exported loop replays the sitter's own detected beats from the end of the sitting; in the `rate` tier its beats are evenly spaced at the sitter's pulse rate.
 
 ### The portrait
 
@@ -185,7 +187,7 @@ The full statement is in **[docs/PRIVACY.md](docs/PRIVACY.md)**. In short:
   - The camera opens only after the sitter agrees.
   - The plate needs a still, silent, face-on person, so covert capture does not work.
   - A second face stops the sitting.
-  - The lens caps when you talk, move or switch windows.
+  - The lens caps when you talk, move or switch windows (after a 3 s grace).
   - **Leave the studio** wipes everything.
 - **No frames are stored or exported, and none are drawn on the plate.** The portrait is made from face geometry and rhythm only. (The optional "Show me the camera" mirror shows the live camera to the sitter while it is open; it is off by default and never recorded.)
 - **Memory only:** nothing is written to disk except files the sitter saves through a save dialog.
@@ -223,7 +225,7 @@ docs/                     PRIVACY.md, DEMO.md
 
 ## Status
 
-Live sittings with the SDK on a real camera (Windows, 4-core laptop) complete end to end: all stages, the lens cap, the seal, the verso, and GIF, PNG and plate export. Unit tests pass.
+Live sittings with the SDK on a real camera (Windows, 4-core laptop) have completed end to end: all stages, the lens cap, the seal, the verso, and GIF, PNG and plate export. They are sensitive to setup: one attempt never started because the SDK kept reporting the chest out of view, which then stopped the whole clock; since then that hint only holds back the breath stage. Unit tests pass.
 
 - [x] The native camera path holds the frame rate (no more code 14)
 - [x] The landmark topology matches the 478-point face mesh
