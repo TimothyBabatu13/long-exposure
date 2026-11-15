@@ -385,19 +385,22 @@ function frame(dt: number): void {
     breath: breathing ? breath.value(wall) : 0.5,
     development: stage === 'developed' ? 1 : 0.12 + 0.88 * sitting.progress,
     ghosts, smile,
-    seal: fixing && !sitting.underexposed ? { params: currentSeal(), progress: Math.min(1, (sitting.exposure - 60) / 3) } : null,
+    seal: fixing && !sitting.underexposed ? { params: currentSeal(), progress: sitting.fixProgress } : null,
     capped: sitting.pause != null && sitting.pause !== 'starting',
     gentle: opts.gentle, time: wall, head: opts.head,
   };
   renderer.render(state);
 
   $('progress-fill').style.width = `${sitting.progress * 100}%`;
+  const waiting = sitting.waitingFor;
+  $('progress-fill').classList.toggle('waiting', waiting != null);
   // For framing problems the SDK's own hint ("chest not visible", "face too low"…) is more useful than ours.
   // A chest or position hint that is only advice (before the breath stage) is
   // shown while the clock keeps running.
   const advice = (readiness === 'chest' || readiness === 'position') && readinessHint ? readinessHint : '';
   $('caption').textContent = sitting.pause === 'framing' && readinessHint ? readinessHint
     : sitting.pause ? pauseCopy[sitting.pause]
+    : waiting ? waitingCopy[waiting]
     : advice && stage !== 'developed' ? `${stageCopy[stage]} ${advice}` : stageCopy[stage];
 
   updateGuide(wall);
@@ -422,13 +425,20 @@ function frame(dt: number): void {
 }
 
 const stageCopy: Record<Stage, string> = {
-  focusing: 'Focusing… sit still, eyes to the lens.',
+  focusing: 'Focusing… keep your head still, breathe normally, eyes to the lens.',
   heart: 'Exposing the heart.',
   breath: 'Exposing the breath.',
   fixing: 'Fixing the plate.',
   developed: '',
   abandoned: '',
 };
+
+// Shown when a stage's time has come but its signal has not settled. Holding
+// the breath is the usual reason the breathing never settles, so say so.
+const waitingCopy = {
+  pulse: 'Waiting for your pulse… keep your face still and in the light.',
+  breath: 'Waiting for your breath… breathe slowly and normally. The plate needs it.',
+} as const;
 
 function currentSeal() {
   // Without SDK HRV, the seal's variation comes from the beat-to-beat intervals
@@ -503,6 +513,16 @@ function showPlate(p: Plate): void {
   const back = $<HTMLCanvasElement>('back');
   back.width = 720; back.height = 720;
   drawVerso(back, p);
+  // An underexposed plate says why on the front, with what to try next sitting:
+  // the verso alone is easy to miss.
+  const note = $('result-note');
+  note.hidden = !p.verso.underexposed;
+  if (p.verso.underexposed) {
+    note.replaceChildren();
+    const strong = document.createElement('strong');
+    strong.textContent = 'Underexposed. ';
+    note.append(strong, `${capitalise(p.verso.underexposedReason ?? 'a signal never settled')}. ${underexposedTip(p.verso.underexposedReason)}`);
+  }
   // The page's requests are counted (and blocked) by the main process; the SDK's own
   // traffic to Presage is not, so the card says so rather than claiming zero bytes.
   $('endcard').textContent = `0 frames saved · ${netCount === 0 ? 'no' : netCount} page requests (blocked) · the SDK contacts Presage · 1 plate made${p.verso.source !== 'live' ? ` · ${p.verso.source.toUpperCase()} DATA` : ''}`;
@@ -532,6 +552,17 @@ function showPlate(p: Plate): void {
 }
 
 let resultBeats = 0;
+
+function capitalise(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** What to try at the next sitting, for each reason a plate can be underexposed. */
+function underexposedTip(reason: string | null | undefined): string {
+  if (reason?.includes('breathing')) return 'Sit again and breathe slowly and normally: holding your breath stops the breath from fixing.';
+  if (reason?.includes('time')) return 'Sit again with more light on your face, square to the camera, and stay on the studio window.';
+  return 'Sit again facing a lamp or window, with your face still and centred.';
+}
 
 function updateSoundButton(): void {
   $('btn-sound').textContent = heart.enabled ? 'Mute heartbeat' : 'Play heartbeat';

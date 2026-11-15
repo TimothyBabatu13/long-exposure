@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, TALK_CAP_DELAY_S, MAX_SITTING_S, SOFT_CAP_DELAY_S, AWAY_GRACE_S, type SittingInputs } from '../src/renderer/sitting/machine';
+import { Sitting, MAX_EXPOSURE_S, SECOND_FACE_ABANDON_S, CAP_DELAY_S, TALK_CAP_DELAY_S, MAX_SITTING_S, SOFT_CAP_DELAY_S, AWAY_GRACE_S, STAGE_AT, type SittingInputs } from '../src/renderer/sitting/machine';
 
 const still: SittingInputs = {
   readiness: 'ok', talking: false, windowFocused: true, running: true,
@@ -206,5 +206,36 @@ describe('soft framing hints', () => {
     expect(s.pause).toBeNull();
     run(s, 1, { windowFocused: false });
     expect(s.pause).toBe('away');
+  });
+});
+
+describe('waiting honestly', () => {
+  it('the progress line stops at the breath mark while the breathing has not settled', () => {
+    const s = new Sitting();
+    run(s, 50, { breathReady: false });
+    expect(s.stage).toBe('heart');
+    expect(s.progress).toBeCloseTo(STAGE_AT.breath / STAGE_AT.fixing, 5);
+    expect(s.waitingFor).toBe('breath');
+  });
+
+  it('names the pulse while focusing waits for it, and nothing while capped', () => {
+    const s = new Sitting();
+    run(s, 15, { pulseReady: false });
+    expect(s.waitingFor).toBe('pulse');
+    run(s, CAP_DELAY_S + 0.2, { pulseReady: false, readiness: 'motion' });
+    expect(s.waitingFor).toBeNull();
+  });
+
+  it('engraves the seal from when fixing begins, even when it begins late', () => {
+    const s = new Sitting();
+    run(s, 35);
+    run(s, 40, { pulseReady: false, hrvReady: false }); // the pulse is lost at 60 s, so fixing waits
+    expect(s.stage).toBe('breath');
+    run(s, 0.2); // it comes back at 75 s: fixing begins now, not at 60 s
+    expect(s.stage).toBe('fixing');
+    expect(s.fixProgress).toBeLessThan(0.2);
+    run(s, 1.5);
+    expect(s.fixProgress).toBeGreaterThan(0.3);
+    expect(s.fixProgress).toBeLessThan(0.7);
   });
 });
