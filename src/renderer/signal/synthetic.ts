@@ -84,7 +84,8 @@ export function syntheticPacket(t0: number, from: number, to: number): SignalPac
   const face = syntheticFace().map((q) => ({ x: q.x + jitter, y: q.y + jitter * 0.5 - breathLift }));
   // Close the eyelids during a blink.
   if (blinkNow) for (const idx of [RIGHT_EYE, LEFT_EYE]) {
-    const cy = idx === RIGHT_EYE ? 222 : 222;
+    // Squash each eye toward its own centre (a fixed y dragged the eyes down the face).
+    const cy = idx.reduce((sum, i) => sum + face[i].y, 0) / idx.length;
     for (const i of idx) face[i] = { x: face[i].x, y: cy + (face[i].y - cy) * 0.1 };
   }
   return {

@@ -94,10 +94,27 @@ export function plateFrameAt(plate: Plate, t: number, opts: { gentle: boolean; g
   };
 }
 
-/** Beat times (relative, inside one loop) taken from the end of a sitting. */
+/**
+ * Beat times (relative, inside one loop) taken from the end of a sitting.
+ *
+ * Confirmed beats lag the end of the sitting, so a window ending "now" left a
+ * silent gap at every loop seam. Instead the loop is made of the last n whole
+ * beat intervals (n chosen to fill L), stretched slightly to fit L exactly:
+ * the beat after the last one is the first one again, and the real
+ * beat-to-beat variation is kept.
+ */
 export function beatsForLoop(confirmed: readonly number[], endT: number, L: number, fallbackBpm: number | null): number[] {
-  const window = confirmed.filter((b) => b > endT - L && b <= endT).map((b) => b - (endT - L));
-  if (window.length >= 2) return window;
+  const recent = confirmed.filter((b) => b <= endT);
+  if (recent.length >= 3) {
+    const iv = recent.slice(1).map((b, i) => b - recent[i]).slice(-8).sort((x, y) => x - y);
+    const period = iv[iv.length >> 1];
+    const n = Math.max(1, Math.round(L / period));
+    if (period > 0 && recent.length > n) {
+      const seg = recent.slice(-(n + 1));
+      const stretch = L / (seg[n] - seg[0]);
+      if (stretch > 0.75 && stretch < 1.33) return seg.slice(0, n).map((b) => (b - seg[0]) * stretch);
+    }
+  }
   const bpm = fallbackBpm || 70;
   const n = Math.max(1, Math.round((L * bpm) / 60));
   return Array.from({ length: n }, (_, i) => (i * L) / n);

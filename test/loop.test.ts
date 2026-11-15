@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { breathLoop, loopLength, plateFrameAt } from '../src/renderer/render/loop';
+import { beatsForLoop, breathLoop, loopLength, plateFrameAt } from '../src/renderer/render/loop';
 import type { Plate, Sample } from '../src/shared/types';
 
 /** A chest trace at `rpm` breaths per minute over `secs` seconds, with slow drift. */
@@ -47,5 +47,25 @@ describe('breathing loop from the real chest trace', () => {
     const old = plate({ breathPeriod: 9 });
     expect(loopLength(old)).toBe(6);
     expect(plateFrameAt(old, 0, { gentle: true, ghosts: false }).breath).toBeCloseTo(0, 5);
+  });
+});
+
+describe('beats on the finished loop', () => {
+  it('has no gap at the seam even though confirmed beats lag the end of the sitting', () => {
+    // 72 bpm with a little natural variation; the last beat lands 1.4 s before the end.
+    const confirmed: number[] = [];
+    for (let t = 0, k = 0; t < 40; k++) { confirmed.push(t); t += 0.833 + (k % 3 - 1) * 0.03; }
+    const endT = confirmed[confirmed.length - 1] + 1.4;
+    const L = 4.3;
+    const beats = beatsForLoop(confirmed, endT, L, 72);
+    expect(beats[0]).toBe(0);
+    const intervals = beats.slice(1).map((b, i) => b - beats[i]);
+    intervals.push(L - beats[beats.length - 1]); // the seam: last beat to the first beat of the next loop
+    for (const iv of intervals) expect(iv).toBeGreaterThan(0.6);
+    for (const iv of intervals) expect(iv).toBeLessThan(1.1);
+  });
+
+  it('falls back to an even rhythm with too few beats', () => {
+    expect(beatsForLoop([1], 2, 4, 60)).toEqual([0, 1, 2, 3]);
   });
 });

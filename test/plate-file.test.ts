@@ -22,6 +22,8 @@ describe('plate files', () => {
     expect(() => parsePlate('not json')).toThrow();
     expect(() => parsePlate(variant({ format: 'other' }))).toThrow();
     expect(() => parsePlate(variant({ face: [{ x: 'a', y: 1 }, { x: 1, y: 1 }, { x: 2, y: 2 }] }))).toThrow();
+    // The renderer reads named landmarks by index: a short face would crash the pairing view.
+    expect(() => parsePlate(variant({ face: syntheticFace().slice(0, 100) }))).toThrow();
     expect(() => parsePlate(variant({ beats: [1, null] }))).toThrow();
     expect(() => parsePlate(variant({ breathPeriod: 9999 }))).toThrow();
     expect(() => parsePlate(variant({ seal: { ...good.seal, rings: 1e9 } }))).toThrow();

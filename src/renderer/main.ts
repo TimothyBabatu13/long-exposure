@@ -60,7 +60,10 @@ async function init(): Promise<void> {
     $('net-count').textContent = String(netCount);
     let host = 'an unknown address';
     try { host = new URL(e.url).host || e.url; } catch { /* malformed URL: keep the generic label */ }
-    addLedger({ at: sitting?.exposure ?? 0, kind: 'privacy', text: `blocked request to ${host}` });
+    // Through the sitting's own ledger when there is one, so it reaches the verso and the plate file.
+    const text = `blocked request to ${host}`;
+    if (sitting) sitting.log('privacy', text);
+    else addLedger({ at: 0, kind: 'privacy', text });
   });
 
   $('btn-sit').addEventListener('click', () => void begin());

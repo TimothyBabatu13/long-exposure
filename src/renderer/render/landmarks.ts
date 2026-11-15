@@ -5,6 +5,9 @@
 // it fails, the renderer falls back to a topology-free stipple portrait.
 import type { Point } from '../../shared/types';
 
+/** Points in the SDK's face mesh; the iris points (to 478) are optional. */
+export const FACE_MESH_POINTS = 468;
+
 export const FACE_OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377,
   152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
 export const LIPS_OUTER = [61, 146, 91, 181, 84, 17, 314, 405, 321, 375, 291, 409, 270, 269, 267, 0, 37, 39, 40, 185];
@@ -40,7 +43,7 @@ export const CONTOURS: { idx: number[]; closed: boolean; weight: number }[] = [
  * above nose tip above chin, and the oval roughly enclosing the nose tip.
  */
 export function topologyLooksRight(p: Point[]): boolean {
-  if (p.length < 468) return false;
+  if (p.length < FACE_MESH_POINTS) return false;
   const top = p[FOREHEAD], nose = p[NOSE_TIP], chin = p[CHIN];
   if (!top || !nose || !chin) return false;
   if (!(top.y < nose.y && nose.y < chin.y)) return false;

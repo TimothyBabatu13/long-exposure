@@ -46,6 +46,7 @@ export class LiveSource implements SignalSource {
   private recording: { at: number; e: SourceEvent }[] | null = null;
   private unsubscribe: (() => void)[] = [];
   private diag = 0;
+  private stopped = false;
   private t0 = 0;
 
   /**
@@ -105,10 +106,14 @@ export class LiveSource implements SignalSource {
 
   private async openPreview(): Promise<void> {
     try {
-      this.preview = await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: 'user', width: { ideal: PREVIEW.width }, height: { ideal: PREVIEW.height } },
       });
+      // The sitting may have ended while the camera was being opened: release it
+      // at once, or the camera light would stay on with nothing using it.
+      if (this.stopped) { stream.getTracks().forEach((t) => t.stop()); return; }
+      this.preview = stream;
       console.log('[studio] mirror preview on');
     } catch (err) {
       console.log(`[studio] mirror preview unavailable (camera not shareable): ${(err as Error).name}`);
@@ -117,6 +122,7 @@ export class LiveSource implements SignalSource {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
     window.clearInterval(this.diag);
     this.unsubscribe.forEach((u) => u());
     this.unsubscribe = [];

@@ -4,6 +4,7 @@ import { GIFEncoder, quantize, applyPalette } from 'gifenc';
 import type { Plate, Point } from '../../shared/types';
 import { PlateRenderer } from '../render/plate';
 import { loopLength, plateFrameAt } from '../render/loop';
+import { FACE_MESH_POINTS } from '../render/landmarks';
 
 /** A small looping GIF (DEV comments render GIFs, not video). */
 export async function plateGif(plate: Plate, opts: { size?: number; fps?: number; gentle: boolean; ghosts: boolean }): Promise<Uint8Array> {
@@ -53,7 +54,7 @@ export function parsePlate(text: string): Plate {
   let p: Plate;
   try { p = JSON.parse(text); } catch { return bad('not JSON'); }
   if (p?.format !== 'long-exposure/plate@1') bad('unknown format');
-  if (!Array.isArray(p.face) || p.face.length < 3 || p.face.length > 1000 || !p.face.every(isPoint)) bad('face');
+  if (!Array.isArray(p.face) || p.face.length < FACE_MESH_POINTS || p.face.length > 1000 || !p.face.every(isPoint)) bad('face');
   if (!Array.isArray(p.beats) || p.beats.length > 200 || !p.beats.every(isNum)) bad('beats');
   if (!isNum(p.breathPeriod) || p.breathPeriod <= 0 || p.breathPeriod > 20) bad('breath period');
   if (p.breathCurve != null && (!Array.isArray(p.breathCurve) || p.breathCurve.length > 1000 || !p.breathCurve.every(isNum))) bad('breath curve');

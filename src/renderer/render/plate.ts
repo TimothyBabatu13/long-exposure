@@ -7,7 +7,7 @@
 import type { HeadStyle, Point, SealParams } from '../../shared/types';
 import {
   CONTOURS, FACE_OVAL, RIGHT_EYE, LEFT_EYE, LIPS_INNER, LIPS_OUTER, RIGHT_IRIS, LEFT_IRIS,
-  RIGHT_BROW, LEFT_BROW, NOSE_BASE, NOSE_BRIDGE, FOREHEAD, CHIN, NOSE_TIP,
+  RIGHT_BROW, LEFT_BROW, NOSE_BASE, NOSE_BRIDGE, FOREHEAD, CHIN, NOSE_TIP, FACE_MESH_POINTS,
 } from './landmarks';
 import { drawSeal } from './seal';
 
@@ -156,7 +156,9 @@ void main() {
   float ang = atan(c.y, c.x);
   float stamp = smoothstep(0.4, 0.9, sin(ang * 120.0)) * smoothstep(1.06, 1.07, e) * (1.0 - smoothstep(1.10, 1.11, e));
   brass *= 1.0 - stamp * 0.22;
-  float bevel = smoothstep(1.0, 1.0, e) * (1.0 - smoothstep(1.0, 1.045, e));
+  // step(), not smoothstep(1.0, 1.0, e): equal edges are undefined in GLSL ES and
+  // some Windows drivers return NaN for them.
+  float bevel = step(1.0, e) * (1.0 - smoothstep(1.0, 1.045, e));
   float bevelLight = 0.5 + 0.5 * dot(normalize(c), normalize(vec2(0.6, 0.75)));
   brass = mix(brass, brass * (0.55 + 0.9 * bevelLight), bevel);
   brass *= 1.0 - smoothstep(0.3, 0.75, length(uv - 0.5)) * 0.45;
@@ -228,7 +230,9 @@ export class PlateRenderer {
     }
 
     let faceTop = 0.2, faceBottom = 0.6;
-    if (f.face) {
+    // The portrait reads named landmarks (forehead, chin, cheeks) by index, so a
+    // face with fewer than the SDK's 468 points is treated as no face at all.
+    if (f.face && f.face.length >= FACE_MESH_POINTS) {
       const P = (i: number) => this.place(f.face![i], f.breath);
       faceTop = P(FOREHEAD).y / s; faceBottom = P(CHIN).y / s;
       this.drawBust(mask, f);
