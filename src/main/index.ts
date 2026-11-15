@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell } from 'electron';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { bindStudioSdk } from './sdk';
 
 // ---------------------------------------------------------------------------
@@ -27,8 +28,13 @@ const telemetry = env.SMARTSPECTRA_TELEMETRY === '1';
 
 const devUrl = process.env.ELECTRON_RENDERER_URL;
 
+// Only files inside the app's own renderer folder count as the studio. Trusting
+// every file:// URL would let any local HTML file dropped on the window get
+// the camera and the preload bridge.
+const rendererDir = pathToFileURL(join(import.meta.dirname, '../renderer')).href + '/';
+
 function isOwnPage(url: string): boolean {
-  return url.startsWith('file://') || (!!devUrl && url.startsWith(devUrl));
+  return url.startsWith(rendererDir) || (!!devUrl && url.startsWith(devUrl));
 }
 
 function createWindow(): BrowserWindow {
@@ -78,8 +84,9 @@ if (!process.env.LE_HARNESS) app.whenReady().then(() => {
     const url = details?.requestingUrl || wc?.getURL() || '';
     callback(permission === 'media' && isOwnPage(url));
   });
-  session.defaultSession.setPermissionCheckHandler((_wc, permission, origin) =>
-    permission === 'media' && isOwnPage(origin),
+  // A check names only the origin ("file:///"), so judge the page's full URL.
+  session.defaultSession.setPermissionCheckHandler((wc, permission, origin, details) =>
+    permission === 'media' && isOwnPage(details?.requestingUrl || wc?.getURL() || origin),
   );
 
   const win = createWindow();

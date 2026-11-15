@@ -194,12 +194,36 @@ export class Sitting {
 
   private enter(s: Stage, text: string): void {
     this.stage = s;
+    if (s === 'fixing') this.fixedAt = this.elapsed;
     this.log('stage', text);
   }
 
-  /** 0..1 progress through the full 60 s exposure, for the progress line. */
+  /**
+   * 0..1 progress through the full 60 s exposure, for the progress line. It
+   * stops at the next stage's mark while that stage's signal has not settled,
+   * so the line never reads "Fixed" while the sitting is still waiting.
+   */
   get progress(): number {
-    return Math.min(1, this.exposure / STAGE_AT.fixing);
+    if (this.stage === 'fixing' || this.stage === 'developed') return 1;
+    const mark = this.stage === 'focusing' ? STAGE_AT.heart : this.stage === 'heart' ? STAGE_AT.breath : STAGE_AT.fixing;
+    return Math.min(this.exposure, mark) / STAGE_AT.fixing;
+  }
+
+  /** The signal the sitting is waiting on once its stage's time has come, or null. */
+  get waitingFor(): 'pulse' | 'breath' | null {
+    if (this.pause) return null;
+    const e = this.exposure;
+    if (this.stage === 'focusing' && e >= STAGE_AT.heart) return 'pulse';
+    if (this.stage === 'heart' && e >= STAGE_AT.breath) return 'breath';
+    if (this.stage === 'breath' && e >= STAGE_AT.fixing) return 'pulse';
+    return null;
+  }
+
+  /** 0..1 through the fixing stage (wall-clock, from when fixing actually began). */
+  get fixProgress(): number {
+    if (this.stage === 'developed') return 1;
+    if (this.stage !== 'fixing' || this.fixedAt == null) return 0;
+    return Math.min(1, (this.elapsed - this.fixedAt) / FIX_DURATION_S);
   }
 }
 
@@ -215,8 +239,8 @@ const pauseText: Record<Exclude<PauseReason, 'starting'>, string> = {
 
 export const pauseCopy: Record<PauseReason, string> = {
   starting: 'Preparing the studio: loading the camera and the SDK models (slower on a slow connection)…',
-  talking: 'Hold still… no talking, the plate is exposing.',
-  motion: 'Hold still. The plate blurs when you move.',
+  talking: 'No talking, the plate is exposing. Keep breathing normally.',
+  motion: 'Keep your head still. The plate blurs when you move.',
   'no-face': 'The photographer cannot see you.',
   lighting: 'The light is wrong. Face a lamp or a window.',
   framing: 'Sit square to the camera, face centred.',

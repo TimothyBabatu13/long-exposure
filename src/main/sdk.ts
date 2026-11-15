@@ -25,12 +25,20 @@ export function bindStudioSdk(win: BrowserWindow, apiKey: string, telemetry: boo
     if (!win.isDestroyed()) win.webContents.send(channel, ...args);
   };
 
-  async function stop(): Promise<void> {
+  // A stop still in flight. A start must wait for it, or it opens the camera
+  // while the previous session is still releasing it ("camera unavailable").
+  let stopping: Promise<void> = Promise.resolve();
+
+  function stop(): Promise<void> {
     const s = sdk;
     sdk = null;
-    if (!s) return;
-    try { await s.stopAsync(); } catch { /* already stopped */ }
-    try { await s.destroy(); } catch { /* ignore */ }
+    if (s) {
+      stopping = stopping.then(async () => {
+        try { await s.stopAsync(); } catch { /* already stopped */ }
+        try { await s.destroy(); } catch { /* ignore */ }
+      });
+    }
+    return stopping;
   }
 
   ipcMain.handle('studio:sdk:start', async () => {

@@ -166,7 +166,7 @@ export class BeatTracker {
   }
 
   reset(): void {
-    this.buf = []; this.beats = []; this.lagEma = null; this.rateAnchor = null;
+    this.buf = []; this.beats = []; this.lagEma = null; this.rateAnchor = null; this.rateBpm = null;
     this.minObservedDelta = Infinity; this.clockOffset = 0;
   }
 }

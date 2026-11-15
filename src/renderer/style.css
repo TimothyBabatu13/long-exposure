@@ -74,6 +74,9 @@ small { color: var(--muted); font-size: 12px; }
 .kymo { width: min(58vh, 100%); height: 11vh; min-height: 70px; border-radius: 4px; box-shadow: 0 0 0 1px #3b2e1e, inset 0 0 18px #000; }
 .progress { position: absolute; bottom: 30px; left: 10%; right: 10%; height: 2px; background: var(--line); }
 #progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+#progress-fill.waiting { animation: waiting 1.6s ease-in-out infinite; }
+@keyframes waiting { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { #progress-fill.waiting { animation: none; opacity: .6; } }
 .progress span { position: absolute; top: 8px; transform: translateX(-50%); font: 11px var(--mono); color: var(--muted); }
 
 .ledger { background: var(--panel); border-left: 1px solid var(--line); padding: 18px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
@@ -98,6 +101,8 @@ small { color: var(--muted); font-size: 12px; }
 .flip .back { transform: rotateY(180deg); }
 .flip.turned .front { transform: rotateY(-180deg); }
 .flip.turned .back { transform: rotateY(0); }
+.result-note { max-width: 36em; margin: 22px auto 0; text-align: center; color: var(--ink); }
+.result-note strong { color: var(--accent); }
 .endcard { font: 13px var(--mono); color: var(--muted); letter-spacing: .06em; margin-top: 28px; text-align: center; }
 
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; }
