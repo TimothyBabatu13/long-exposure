@@ -161,8 +161,13 @@ if (process.env.LE_SMOKE_DIR) {
       await wait(1.2); await shot('6-verso');
       // LE_SMOKE_GIF=<size> also saves the finished plate's GIF loop.
       if (process.env.LE_SMOKE_GIF) {
-        const b64 = await win.webContents.executeJavaScript(`window.__smokeGif(${Number(process.env.LE_SMOKE_GIF) || 480})`) as string | null;
-        if (b64) writeFileSync(join(dir, '7-loop.gif'), Buffer.from(b64, 'base64'));
+        try {
+          const b64 = await win.webContents.executeJavaScript(`window.__smokeGif(${Number(process.env.LE_SMOKE_GIF) || 480})`) as string | null;
+          if (b64) writeFileSync(join(dir, '7-loop.gif'), Buffer.from(b64, 'base64'));
+          console.log(b64 ? `[smoke] GIF saved (${Math.round(b64.length * 0.75 / 1024)} KB)` : '[smoke] no plate to make a GIF from');
+        } catch (err) {
+          console.log(`[smoke] GIF failed: ${(err as Error).message}`);
+        }
       }
       app.quit();
     });

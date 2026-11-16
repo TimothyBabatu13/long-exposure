@@ -14,12 +14,35 @@ export async function plateGif(plate: Plate, opts: { size?: number; fps?: number
   const gif = GIFEncoder();
   const L = loopLength(plate);
   const frames = Math.round(L * fps);
+  const frameAt = (i: number) => {
+    r.render(plateFrameAt(plate, i / fps, { gentle: true, ghosts: opts.ghosts }));
+    return r.pixels();
+  };
   try {
+    // One palette for the whole loop, from frames spread across it (so the
+    // flush and the breath are in it). Index 255 is kept for "unchanged".
+    const samples = [0, 0.2, 0.4, 0.6, 0.8].map((f) => frameAt(Math.floor(f * frames)));
+    const all = new Uint8Array(samples.reduce((n, s) => n + s.length, 0));
+    samples.reduce((o, s) => { all.set(s, o); return o + s.length; }, 0);
+    const palette = quantize(all, 255);
+    while (palette.length < 255) palette.push([0, 0, 0]);
+    palette.push([0, 0, 0]);
+    const UNCHANGED = 255;
+    // Only the flush and the breath move, so after the first frame only the
+    // pixels that changed are stored; the rest stay from the frame before.
+    // (The grain is fixed in place, which is what makes this pay off.)
+    let prev: Uint8Array | null = null;
     for (let i = 0; i < frames; i++) {
-      r.render(plateFrameAt(plate, i / fps, { gentle: true, ghosts: opts.ghosts }));
-      const rgba = r.pixels();
-      const palette = quantize(rgba, 128);
-      gif.writeFrame(applyPalette(rgba, palette), size, size, { palette, delay: Math.round(1000 / fps) });
+      const idx = applyPalette(frameAt(i), palette);
+      const delay = Math.round(1000 / fps);
+      if (!prev) {
+        gif.writeFrame(idx, size, size, { palette, delay });
+      } else {
+        const delta = new Uint8Array(idx.length);
+        for (let k = 0; k < idx.length; k++) delta[k] = idx[k] === prev[k] ? UNCHANGED : idx[k];
+        gif.writeFrame(delta, size, size, { delay, transparent: true, transparentIndex: UNCHANGED, dispose: 1 });
+      }
+      prev = idx;
       if (i % 5 === 0) await new Promise((res) => setTimeout(res, 0)); // keep the UI responsive
     }
     gif.finish();
