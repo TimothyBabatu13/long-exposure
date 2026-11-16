@@ -1,5 +1,9 @@
 # Long Exposure
 
+<p align="center"><img src="docs/media/plate-loop.gif" width="360" alt="A silver daguerreotype portrait in a brass oval mat. It brightens with each heartbeat and the bust rises and falls with each breath."></p>
+
+<p align="center"><em>A finished plate from a real recorded sitting: it brightens on each heartbeat and breathes with the sitter's recorded breaths.</em></p>
+
 **A 60-second living daguerreotype.** You sit for a portrait, as people did in 1840. The plate develops while you keep your head still and breathe normally, and the finished portrait flushes at the pace of your real pulse and breathes with your own recorded breaths. No photograph of you is taken or kept.
 
 **Try it in your browser, no install or key:** [long-exposure-brown.vercel.app](https://long-exposure-brown.vercel.app/). Press **Watch a real sitting** to play back a real 90-second sitting recorded with the SDK.
