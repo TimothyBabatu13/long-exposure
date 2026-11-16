@@ -117,6 +117,16 @@ async function init(): Promise<void> {
     window.addEventListener('blur', () => { focused = false; });
     window.addEventListener('focus', () => { focused = true; });
     document.addEventListener('visibilitychange', () => { focused = document.visibilityState === 'visible' && document.hasFocus(); });
+  } else {
+    // Smoke test only: lets the unattended run save the finished plate's GIF
+    // (for the README and the post) without a save dialog.
+    (window as unknown as { __smokeGif: (size: number) => Promise<string | null> }).__smokeGif = async (size) => {
+      if (!plate) return null;
+      const bytes = await plateGif(plate, { size, gentle: true, ghosts: opts.ghosts });
+      let bin = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      return btoa(bin);
+    };
   }
 }
 
