@@ -115,22 +115,28 @@ void main() {
   float cross = engrave((uv.x + uv.y) * uSize * 0.21, smoothstep(0.6, 0.9, dark) * 0.7 * smoothstep(0.2, 0.6, face));
   float inked = max(ink1, cross);
 
-  // Silver positive: continuous tone, as a real daguerreotype is. The
-  // engraving survives only as a faint texture over the sitter, strongest in
-  // the shadows, so the face reads as a photograph rather than as scanlines.
+  // Silver positive: continuous tone, as a real daguerreotype is, with the
+  // engraving kept as a texture over the sitter, strongest in the shadows. A
+  // smooth tone alone read as a rendered mannequin; the engraved lines and a
+  // fixed silver grain keep it reading as a plate.
   vec3 silverHi = vec3(0.86, 0.84, 0.79), silverLo = vec3(0.13, 0.11, 0.09);
   vec3 smoothTone = mix(silverLo, silverHi, smoothstep(0.02, 0.98, tone)) + (fbm(uv * 3.0) - 0.5) * 0.04;
   float sitter = smoothstep(0.0, 0.6, clamp(face + coat + crown, 0.0, 1.0));
   vec3 image = smoothTone;
+  float engraved = inked * sitter * (0.18 + 0.32 * smoothstep(0.25, 0.75, dark));
+  image = mix(image, image * 0.42, engraved);
+  // Static silver grain (seeded by position only, so the GIF loop stays clean).
+  image += (hash(floor(uv * uSize * 0.5)) - 0.5) * 0.07 * (0.4 + 0.6 * sitter);
   image = mix(image, vec3(0.10, 0.08, 0.06), ink.a * 0.85);
 
   // The flush: a warm wave travelling forehead to chin with each heartbeat.
   float faceV = clamp((uv.y - uFaceTop) / max(0.01, uFaceBottom - uFaceTop), 0.0, 1.0);
-  float band = exp(-pow(faceV - uTravel, 2.0) / 0.09);
-  float flushAmt = uFlush * smoothstep(0.05, 0.5, face) * (0.3 + 0.7 * band) * mix(1.0, 0.7, uGentle);
+  float band = exp(-pow(faceV - uTravel, 2.0) / 0.12);
+  float flushAmt = uFlush * smoothstep(0.05, 0.5, face) * (0.4 + 0.6 * band) * mix(1.0, 0.7, uGentle);
   // The pulse is mostly light, with only a hint of warmth: a brightening that
   // reads on any skin tone and on a silver plate, rather than "rosy cheeks".
-  vec3 flushed = image * vec3(1.24, 1.14, 1.06) + vec3(0.06, 0.045, 0.025);
+  // Strong enough to read on a phone screen and in a compressed GIF.
+  vec3 flushed = image * vec3(1.34, 1.20, 1.07) + vec3(0.09, 0.06, 0.03);
   image = mix(image, flushed, flushAmt);
 
   // Bare plate (before development): cool silver, tarnish creeping from the edge.
