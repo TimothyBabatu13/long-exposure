@@ -159,6 +159,11 @@ if (process.env.LE_SMOKE_DIR) {
       await wait(Number(process.env.LE_SMOKE_HOLD ?? 0));
       await win.webContents.executeJavaScript("document.getElementById('btn-flip').click()");
       await wait(1.2); await shot('6-verso');
+      // LE_SMOKE_GIF=<size> also saves the finished plate's GIF loop.
+      if (process.env.LE_SMOKE_GIF) {
+        const b64 = await win.webContents.executeJavaScript(`window.__smokeGif(${Number(process.env.LE_SMOKE_GIF) || 480})`) as string | null;
+        if (b64) writeFileSync(join(dir, '7-loop.gif'), Buffer.from(b64, 'base64'));
+      }
       app.quit();
     });
   });
